@@ -148,6 +148,7 @@ export function getMatchedLocation(home, searchLocation) {
 // Core Mathematical State Logic for MemorialExpress
 export function calculateQuote(q, db) {
   const h = q.home;
+  const homeObj = q.selectedHomeObj || (db?.homes || []).find(x => x.id === h || x._id === h) || null;
   const pkgFromDb = getPackage(db, h, q.service);
   const p = {
     section1: q.selectedServiceObject?.section1Price !== null && q.selectedServiceObject?.section1Price !== undefined
