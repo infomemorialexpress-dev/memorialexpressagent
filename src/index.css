@@ -948,6 +948,15 @@ p.page-subtitle {
   to { opacity: 1; transform: translateX(0); }
 }
 
+@keyframes slideOutRight {
+  from { opacity: 1; transform: translateX(0); max-height: 80px; margin-bottom: 0; }
+  to { opacity: 0; transform: translateX(40px); max-height: 0; margin-bottom: -10px; }
+}
+
+.toast-closing {
+  animation: slideOutRight 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+}
+
 /* Skeleton & Shimmer Styles */
 .skeleton-shimmer {
   background: linear-gradient(
