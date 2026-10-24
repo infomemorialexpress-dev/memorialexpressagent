@@ -318,7 +318,7 @@ export default function SelectService({ onBack, onContinue }) {
       )}
 
       {/* Empty State */}
-      {!isLoading && services.length === 0 && !error && (
+      {!isSyncing && services.length === 0 && !error && (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
           <p>No funeral services available for the selected location.</p>
         </div>
