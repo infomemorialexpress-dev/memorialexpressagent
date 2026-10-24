@@ -4,6 +4,29 @@ import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
 import { formatMoney, CATALOG_CASKETS, isEligibleCasket } from '../../utils/quoteLogic.js';
 
+// Canonical fallback caskets generator for instantaneous zero-delay rendering
+const getInitialFallbackCaskets = (homeId, service) => {
+  const fallbackList = (CATALOG_CASKETS || []).map((cat) => ({
+    _id: cat.id,
+    id: cat.id,
+    name: cat.name,
+    listPrice: cat.price,
+    price: cat.price,
+    imageUrl: cat.image,
+    image: cat.image,
+    specifications: cat.description,
+    description: cat.description,
+    productCode: cat.productCode,
+    assignment: 'Global (*)',
+    home: cat.home || 'optima'
+  }));
+
+  const eligible = fallbackList.filter((c) =>
+    isEligibleCasket(c, homeId || 'optima', service || 'one_day')
+  );
+  return eligible.length > 0 ? eligible : fallbackList;
+};
+
 export default function ChooseCasket({ onBack, onContinue }) {
   const {
     lang,
@@ -14,8 +37,16 @@ export default function ChooseCasket({ onBack, onContinue }) {
     addToast
   } = useQuote();
 
-  const [caskets, setCaskets] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Retrieve funeralHomeId from QuoteContext
+  const funeralHomeId =
+    selectedFuneralHome?._id ||
+    selectedFuneralHome?.id ||
+    quote.home ||
+    quote.homeId ||
+    '';
+
+  const [caskets, setCaskets] = useState(() => getInitialFallbackCaskets(funeralHomeId, quote.service));
+  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState(null);
   const [localSelectedCasket, setLocalSelectedCasket] = useState(
     selectedCasket || quote.selectedCasketObject || null
@@ -27,14 +58,6 @@ export default function ChooseCasket({ onBack, onContinue }) {
 
   // Hover states for card image zoom
   const [hoveredCardId, setHoveredCardId] = useState(null);
-
-  // Retrieve funeralHomeId from QuoteContext
-  const funeralHomeId =
-    selectedFuneralHome?._id ||
-    selectedFuneralHome?.id ||
-    quote.home ||
-    quote.homeId ||
-    '';
 
   // Priority sort matching the exact design reference
   const canonicalOrder = {
@@ -50,7 +73,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
     let isMounted = true;
 
     async function fetchCaskets() {
-      setIsLoading(true);
+      setIsSyncing(true);
       setError(null);
 
       // Prepare canonical fallback items
@@ -141,7 +164,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
         }
       } finally {
         if (isMounted) {
-          setIsLoading(false);
+          setIsSyncing(false);
         }
       }
     }
@@ -184,28 +207,39 @@ export default function ChooseCasket({ onBack, onContinue }) {
           : 'Enlarged high-resolution merchandise cards with detailed construction and interior specs.'}
       </p>
 
-      {/* Loading Indicator */}
-      {isLoading && (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
+      {/* Non-blocking background sync badge */}
+      {isSyncing && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 14px',
+            backgroundColor: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: '20px',
+            color: '#1d4ed8',
+            fontSize: '12px',
+            fontWeight: 600,
+            marginBottom: '18px',
+          }}
+        >
           <div
             style={{
-              width: '34px',
-              height: '34px',
-              border: '3px solid #e2e8f0',
-              borderTopColor: '#183655',
+              width: '12px',
+              height: '12px',
+              border: '2px solid #93c5fd',
+              borderTopColor: '#1d4ed8',
               borderRadius: '50%',
               animation: 'spin 0.8s linear infinite',
-              margin: '0 auto 16px'
             }}
           />
-          <span style={{ fontSize: '14.5px', fontWeight: 600 }}>
-            {lang === 'es' ? 'Cargando ataúdes disponibles...' : 'Loading available caskets...'}
-          </span>
+          <span>{lang === 'es' ? 'Sincronizando inventario de ataúdes en vivo...' : 'Syncing live casket catalog...'}</span>
         </div>
       )}
 
       {/* Error Banner */}
-      {!isLoading && error && (
+      {error && (
         <div
           style={{
             backgroundColor: '#fef2f2',
@@ -222,7 +256,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
       )}
 
       {/* Empty State */}
-      {!isLoading && caskets.length === 0 && !error && (
+      {caskets.length === 0 && !error && !isSyncing && (
         <div style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
           <p style={{ fontSize: '15px' }}>
             {lang === 'es'
@@ -232,8 +266,8 @@ export default function ChooseCasket({ onBack, onContinue }) {
         </div>
       )}
 
-      {/* Caskets Grid (3 Columns on Desktop, Responsive) */}
-      {!isLoading && caskets.length > 0 && (
+      {/* Caskets Grid (3 Columns on Desktop, Responsive, rendered immediately) */}
+      {caskets.length > 0 && (
         <div
           style={{
             display: 'grid',

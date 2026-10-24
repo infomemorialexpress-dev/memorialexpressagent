@@ -5,6 +5,17 @@ import api from '../../services/api.js';
 import { defaultAddons } from '../../utils/legacyData.js';
 import { formatMoney } from '../../utils/quoteLogic.js';
 
+const DEFAULT_FALLBACK_ADDONS = [
+  { id: 'flowers', name: 'Flowers', price: 350 },
+  { id: 'memorial', name: 'Memorial package — guest book, memorial cards & video', price: 395 },
+  { id: 'doves', name: 'Dove release', price: 400 },
+  { id: 'music', name: 'Music', price: 0 },
+  { id: 'escorts', name: 'Funeral escorts', price: 250 },
+  { id: 'air_tray', name: 'Air tray', price: 275 },
+  { id: 'photo_tribute', name: 'Photo tribute (up to 15 photos)', price: 325 },
+  { id: 'rosaries', name: 'Rosaries', price: 20 },
+];
+
 export default function AddonsOptions({ onBack, onContinue }) {
   const { lang, quote, setQuote, selectedFuneralHome, db, addToast } = useQuote();
 
@@ -48,9 +59,9 @@ export default function AddonsOptions({ onBack, onContinue }) {
     return initial;
   });
 
-  // Available add-ons list loaded from API + standard fallback
-  const [addonsList, setAddonsList] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // Available add-ons list loaded with optimistic fallback immediately
+  const [addonsList, setAddonsList] = useState(DEFAULT_FALLBACK_ADDONS);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Standard fallback list matching the client design exactly
   const standardFallbackAddons = useMemo(() => {
@@ -61,16 +72,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
         price: Number(item[2]) || 0,
       }));
     }
-    return [
-      { id: 'flowers', name: 'Flowers', price: 350 },
-      { id: 'memorial', name: 'Memorial package — guest book, memorial cards & video', price: 395 },
-      { id: 'doves', name: 'Dove release', price: 400 },
-      { id: 'music', name: 'Music', price: 0 },
-      { id: 'escorts', name: 'Funeral escorts', price: 250 },
-      { id: 'air_tray', name: 'Air tray', price: 275 },
-      { id: 'photo_tribute', name: 'Photo tribute (up to 15 photos)', price: 325 },
-      { id: 'rosaries', name: 'Rosaries', price: 20 },
-    ];
+    return DEFAULT_FALLBACK_ADDONS;
   }, []);
 
   // Fetch available add-ons from GET /api/catalog/location/${funeralHomeId}?type=ADDON
@@ -78,7 +80,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
     let isMounted = true;
 
     async function loadAddons() {
-      setIsLoading(true);
+      setIsSyncing(true);
       try {
         if (funeralHomeId) {
           const res = await api.get(`/catalog/location/${funeralHomeId}?type=ADDON`);
@@ -121,7 +123,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
         }
       } finally {
         if (isMounted) {
-          setIsLoading(false);
+          setIsSyncing(false);
         }
       }
     }
@@ -261,6 +263,37 @@ export default function AddonsOptions({ onBack, onContinue }) {
           ? 'Seleccione arreglos florales, cortejo fúnebre, actas de defunción y permisos.'
           : 'Select floral arrangements, funeral escorts, death certificates, and memorial items.'}
       </p>
+
+      {/* Non-blocking background sync badge */}
+      {isSyncing && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 14px',
+            backgroundColor: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: '20px',
+            color: '#1d4ed8',
+            fontSize: '12px',
+            fontWeight: 600,
+            marginBottom: '18px',
+          }}
+        >
+          <div
+            style={{
+              width: '12px',
+              height: '12px',
+              border: '2px solid #93c5fd',
+              borderTopColor: '#1d4ed8',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }}
+          />
+          <span>{lang === 'es' ? 'Sincronizando precios de extras en vivo...' : 'Syncing live add-ons pricing...'}</span>
+        </div>
+      )}
 
       {/* 2. Certificates & Permits Highlighted Section */}
       <div

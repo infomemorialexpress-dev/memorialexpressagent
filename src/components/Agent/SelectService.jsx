@@ -3,6 +3,16 @@ import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
 
+const CANONICAL_SERVICES_FALLBACK = [
+  { _id: 'two_day', name: 'Two-day service', category: 'Traditional', specifications: 'Traditional 2-day viewing & chapel service', section1Price: 3800, section2Price: 1200 },
+  { _id: 'one_day', name: 'One-day service funeral', category: 'Traditional', specifications: 'Same-day viewing & funeral service', section1Price: 3395, section2Price: 0 },
+  { _id: 'traditional_cremation', name: 'Traditional cremation', category: 'Cremation', specifications: 'Full viewing & funeral ceremony prior to cremation', section1Price: 3760, section2Price: 1295 },
+  { _id: 'memorial_cremation', name: 'Memorial cremation', category: 'Cremation', specifications: 'Cremation with subsequent chapel memorial ceremony', section1Price: 2620, section2Price: 675 },
+  { _id: 'direct_cremation', name: 'Direct cremation', category: 'Cremation', specifications: 'Direct disposition without viewing or ceremony', section1Price: 2130, section2Price: 175 },
+  { _id: 'ship_traditional', name: 'Ship out with funeral', category: 'Ship Out', specifications: 'Preparation & service prior to domestic/international transit', section1Price: 3355, section2Price: 0 },
+  { _id: 'ship_direct', name: 'Direct ship out', category: 'Ship Out', specifications: 'Direct transfer to airport for forwarding', section1Price: 2065, section2Price: 0 },
+];
+
 export default function SelectService({ onBack, onContinue }) {
   const {
     lang,
@@ -13,8 +23,8 @@ export default function SelectService({ onBack, onContinue }) {
     addToast
   } = useQuote();
 
-  const [services, setServices] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [services, setServices] = useState(() => CANONICAL_SERVICES_FALLBACK);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState(null);
   const [localSelectedService, setLocalSelectedService] = useState(
     selectedService || quote.selectedServiceObject || null
@@ -39,23 +49,13 @@ export default function SelectService({ onBack, onContinue }) {
     'direct ship out': 7
   };
 
-  const CANONICAL_SERVICES_FALLBACK = [
-    { _id: 'two_day', name: 'Two-day service', category: 'Traditional', specifications: 'Traditional 2-day viewing & chapel service', section1Price: 3800, section2Price: 1200 },
-    { _id: 'one_day', name: 'One-day service funeral', category: 'Traditional', specifications: 'Same-day viewing & funeral service', section1Price: 3395, section2Price: 0 },
-    { _id: 'traditional_cremation', name: 'Traditional cremation', category: 'Cremation', specifications: 'Full viewing & funeral ceremony prior to cremation', section1Price: 3760, section2Price: 1295 },
-    { _id: 'memorial_cremation', name: 'Memorial cremation', category: 'Cremation', specifications: 'Cremation with subsequent chapel memorial ceremony', section1Price: 2620, section2Price: 675 },
-    { _id: 'direct_cremation', name: 'Direct cremation', category: 'Cremation', specifications: 'Direct disposition without viewing or ceremony', section1Price: 2130, section2Price: 175 },
-    { _id: 'ship_traditional', name: 'Ship out with funeral', category: 'Ship Out', specifications: 'Preparation & service prior to domestic/international transit', section1Price: 3355, section2Price: 0 },
-    { _id: 'ship_direct', name: 'Direct ship out', category: 'Ship Out', specifications: 'Direct transfer to airport for forwarding', section1Price: 2065, section2Price: 0 },
-  ];
-
   useEffect(() => {
     let isMounted = true;
 
     async function fetchServices() {
       const targetHomeId = funeralHomeId || 'optima';
 
-      setIsLoading(true);
+      setIsSyncing(true);
       setError(null);
       try {
         const response = await api.get(`/catalog/location/${targetHomeId}?type=SERVICE`);
@@ -101,7 +101,7 @@ export default function SelectService({ onBack, onContinue }) {
         }
       } finally {
         if (isMounted) {
-          setIsLoading(false);
+          setIsSyncing(false);
         }
       }
     }
@@ -144,28 +144,39 @@ export default function SelectService({ onBack, onContinue }) {
           : 'Choose from traditional burial, viewing, cremation, or shipping services.'}
       </p>
 
-      {/* Loading Indicator */}
-      {isLoading && (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
+      {/* Non-blocking live background sync badge */}
+      {isSyncing && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 14px',
+            backgroundColor: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: '20px',
+            color: '#1d4ed8',
+            fontSize: '12px',
+            fontWeight: 600,
+            marginBottom: '18px',
+          }}
+        >
           <div
             style={{
-              width: '34px',
-              height: '34px',
-              border: '3px solid #e2e8f0',
-              borderTopColor: '#183655',
+              width: '12px',
+              height: '12px',
+              border: '2px solid #93c5fd',
+              borderTopColor: '#1d4ed8',
               borderRadius: '50%',
               animation: 'spin 0.8s linear infinite',
-              margin: '0 auto 16px',
             }}
           />
-          <span style={{ fontSize: '14.5px', fontWeight: 600 }}>
-            {lang === 'es' ? 'Cargando servicios disponibles...' : 'Loading available funeral services...'}
-          </span>
+          <span>{lang === 'es' ? 'Sincronizando tarifas en vivo...' : 'Syncing live service pricing...'}</span>
         </div>
       )}
 
       {/* Error State */}
-      {!isLoading && error && (
+      {error && (
         <div
           style={{
             backgroundColor: '#fef2f2',
@@ -181,8 +192,8 @@ export default function SelectService({ onBack, onContinue }) {
         </div>
       )}
 
-      {/* Services Grid (Matches screenshot 2-column layout) */}
-      {!isLoading && services.length > 0 && (
+      {/* Services Grid (Matches screenshot 2-column layout, rendered immediately) */}
+      {services.length > 0 && (
         <div
           style={{
             display: 'grid',

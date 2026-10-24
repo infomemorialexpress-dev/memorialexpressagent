@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
+import { LEGACY_DATA } from '../../utils/legacyData.js';
 
 export default function LocationSearch({ onContinue }) {
   const {
@@ -17,9 +18,11 @@ export default function LocationSearch({ onContinue }) {
   const [searchFilter, setSearchFilter] = useState('City');
   const [searchQuery, setSearchQuery] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
-  const [allHomes, setAllHomes] = useState(
-    (contextHomes && contextHomes.length > 0) ? contextHomes : (db?.homes || [])
-  );
+  const [allHomes, setAllHomes] = useState(() => {
+    if (contextHomes && contextHomes.length > 0) return contextHomes;
+    if (db?.homes && db.homes.length > 0) return db.homes;
+    return LEGACY_DATA?.initialDb?.homes || [];
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [localSelectedId, setLocalSelectedId] = useState(
     selectedFuneralHome?._id || selectedFuneralHome?.id || quote.home || ''
@@ -243,7 +246,7 @@ export default function LocationSearch({ onContinue }) {
         </div>
       </form>
 
-      {/* Loading State */}
+      {/* Loading State for empty initial cache */}
       {isLoading && allHomes.length === 0 && (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
           <div
@@ -258,6 +261,37 @@ export default function LocationSearch({ onContinue }) {
             }}
           />
           <span>Loading funeral homes directory...</span>
+        </div>
+      )}
+
+      {/* Non-blocking Background Syncing Notice */}
+      {isLoading && allHomes.length > 0 && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 14px',
+            backgroundColor: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: '20px',
+            color: '#1d4ed8',
+            fontSize: '12px',
+            fontWeight: 600,
+            marginBottom: '16px',
+          }}
+        >
+          <div
+            style={{
+              width: '12px',
+              height: '12px',
+              border: '2px solid #93c5fd',
+              borderTopColor: '#1d4ed8',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }}
+          />
+          <span>{lang === 'es' ? 'Sincronizando directorio en vivo...' : 'Syncing live funeral homes directory...'}</span>
         </div>
       )}
 

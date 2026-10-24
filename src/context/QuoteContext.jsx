@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { fetchAgentQuoteDb } from '../services/agent/agentService.js';
 import { getStoredDb } from '../services/base/apiClient.js';
 import { calculateQuote, isCremation } from '../utils/quoteLogic.js';
+import { LEGACY_DATA } from '../utils/legacyData.js';
 import api from '../services/api.js';
 
 const QuoteContext = createContext(null);
@@ -10,8 +11,14 @@ export function QuoteProvider({ children }) {
   // Language State
   const [lang, setLang] = useState(() => localStorage.getItem('memorial_lang') || 'en');
 
-  // Real Funeral Homes from Backend API
-  const [funeralHomes, setFuneralHomes] = useState([]);
+  // Real Funeral Homes from Backend API (Optimistic fallback loaded immediately)
+  const [funeralHomes, setFuneralHomes] = useState(() => {
+    try {
+      const stored = getStoredDb();
+      if (stored?.homes?.length > 0) return stored.homes;
+    } catch {}
+    return LEGACY_DATA?.initialDb?.homes || [];
+  });
   const [isLoadingHomes, setIsLoadingHomes] = useState(false);
   const [selectedFuneralHome, setSelectedFuneralHome] = useState(null);
 
