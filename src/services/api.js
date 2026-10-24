@@ -1,8 +1,12 @@
 import axios from 'axios';
 
-// The NestJS backend defaults to PORT 5000 with global prefix '/api'
-const DEFAULT_API_URL = 'http://localhost:5000/api';
-const BASE_URL = import.meta.env.VITE_API_URL || DEFAULT_API_URL;
+const DEFAULT_API_URL = 'https://memorialexpressbackend.onrender.com/api';
+const formatApiUrl = (url) => {
+  if (!url) return DEFAULT_API_URL;
+  const trimmed = url.trim().replace(/\/+$/, '');
+  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+};
+const BASE_URL = formatApiUrl(import.meta.env.VITE_API_URL || DEFAULT_API_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,
