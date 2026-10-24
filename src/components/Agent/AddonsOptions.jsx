@@ -4,6 +4,7 @@ import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
 import { defaultAddons } from '../../utils/legacyData.js';
 import { formatMoney } from '../../utils/quoteLogic.js';
+import { AddonRowSkeleton } from '../common/SkeletonLoader.jsx';
 
 const DEFAULT_FALLBACK_ADDONS = [
   { id: 'flowers', name: 'Flowers', price: 350 },
@@ -265,7 +266,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
       </p>
 
       {/* Non-blocking background sync badge */}
-      {isSyncing && (
+      {isSyncing && addonsList.length > 0 && (
         <div
           style={{
             display: 'inline-flex',
@@ -282,16 +283,27 @@ export default function AddonsOptions({ onBack, onContinue }) {
           }}
         >
           <div
+            className="app-spinner"
             style={{
-              width: '12px',
-              height: '12px',
-              border: '2px solid #93c5fd',
+              width: '13px',
+              height: '13px',
+              borderWidth: '2px',
+              borderColor: '#93c5fd',
               borderTopColor: '#1d4ed8',
-              borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite',
             }}
           />
           <span>{lang === 'es' ? 'Sincronizando precios de extras en vivo...' : 'Syncing live add-ons pricing...'}</span>
+        </div>
+      )}
+
+      {/* Loading Skeleton when addons are loading */}
+      {isSyncing && addonsList.length === 0 && (
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', color: '#183655', fontWeight: 650, fontSize: '13.5px' }}>
+            <div className="app-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+            <span>{lang === 'es' ? 'Cargando opciones adicionales...' : 'Loading additional options & add-ons...'}</span>
+          </div>
+          <AddonRowSkeleton count={5} />
         </div>
       )}
 

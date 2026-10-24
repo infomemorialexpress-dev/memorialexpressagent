@@ -3,6 +3,8 @@ import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
 import { formatMoney, CATALOG_CASKETS, isEligibleCasket } from '../../utils/quoteLogic.js';
+import { CasketCardSkeleton } from '../common/SkeletonLoader.jsx';
+import ShimmerImage from '../common/ShimmerImage.jsx';
 
 // Canonical fallback caskets generator for instantaneous zero-delay rendering
 const getInitialFallbackCaskets = (homeId, service) => {
@@ -208,7 +210,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
       </p>
 
       {/* Non-blocking background sync badge */}
-      {isSyncing && (
+      {isSyncing && caskets.length > 0 && (
         <div
           style={{
             display: 'inline-flex',
@@ -225,16 +227,27 @@ export default function ChooseCasket({ onBack, onContinue }) {
           }}
         >
           <div
+            className="app-spinner"
             style={{
-              width: '12px',
-              height: '12px',
-              border: '2px solid #93c5fd',
+              width: '13px',
+              height: '13px',
+              borderWidth: '2px',
+              borderColor: '#93c5fd',
               borderTopColor: '#1d4ed8',
-              borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite',
             }}
           />
           <span>{lang === 'es' ? 'Sincronizando inventario de ataúdes en vivo...' : 'Syncing live casket catalog...'}</span>
+        </div>
+      )}
+
+      {/* Loading Skeleton when caskets are loading */}
+      {isSyncing && caskets.length === 0 && (
+        <div style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', color: '#183655', fontWeight: 650, fontSize: '13.5px' }}>
+            <div className="app-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+            <span>{lang === 'es' ? 'Cargando ataúdes disponibles...' : 'Loading available caskets & merchandise...'}</span>
+          </div>
+          <CasketCardSkeleton count={6} />
         </div>
       )}
 
@@ -369,24 +382,20 @@ export default function ChooseCasket({ onBack, onContinue }) {
                       border: '1px solid #f1f5f9'
                     }}
                   >
-                    {imageUrl ? (
-                      <img
-                        src={imageUrl}
-                        alt={casket.name}
-                        loading="lazy"
-                        style={{
-                          maxHeight: '100%',
-                          maxWidth: '100%',
-                          objectFit: 'contain',
-                          transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                          transform: isHovered ? 'scale(1.08)' : 'scale(1)'
-                        }}
-                      />
-                    ) : (
-                      <span style={{ color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' }}>
-                        No photo available
-                      </span>
-                    )}
+                    <ShimmerImage
+                      src={imageUrl}
+                      alt={casket.name}
+                      width="100%"
+                      height="100%"
+                      objectFit="contain"
+                      imgStyle={{
+                        maxHeight: '100%',
+                        maxWidth: '100%',
+                        transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                        transform: isHovered ? 'scale(1.08)' : 'scale(1)'
+                      }}
+                      fallbackText="No photo available"
+                    />
                   </div>
 
                   {/* Casket Item Name */}

@@ -8,6 +8,8 @@ import AgentQuoteFunnel from './pages/Agent/AgentQuoteFunnel.jsx';
 import LanguageSelectionScreen from './pages/Agent/LanguageSelectionScreen.jsx';
 import AgentLoginPage from './pages/Agent/AgentLoginPage.jsx';
 
+import LoadingSpinner from './components/common/LoadingSpinner.jsx';
+
 /**
  * Route protection for authenticated Sales Agents
  */
@@ -16,31 +18,13 @@ function ProtectedRoute({ children }) {
 
   if (isLoading) {
     return (
-      <div
-        style={{
-          minHeight: '60vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '14px',
-          color: '#183655',
-        }}
-      >
-        <div
-          style={{
-            width: '38px',
-            height: '38px',
-            border: '3px solid #dbe2ea',
-            borderTopColor: '#183655',
-            borderRadius: '50%',
-            animation: 'spin 0.8s linear infinite',
-          }}
-        />
-        <div style={{ fontSize: '14px', fontWeight: 600, color: '#67788e' }}>
-          Verifying agent session...
-        </div>
-      </div>
+      <LoadingSpinner
+        size="lg"
+        color="primary"
+        fullHeight
+        label="Verifying agent session..."
+        subtext="Connecting to Memorial Express security services"
+      />
     );
   }
 
@@ -53,7 +37,7 @@ function ProtectedRoute({ children }) {
 
 function AgentAppLayout() {
   const location = useLocation();
-  const { lang, setLanguage, toasts, removeToast } = useQuote();
+  const { lang, setLanguage, toasts, removeToast, isLoadingHomes, isLoadingDb } = useQuote();
   const [hasSelectedLanguage, setHasSelectedLanguage] = useState(() => {
     return Boolean(localStorage.getItem('memorial_lang'));
   });
@@ -71,6 +55,9 @@ function AgentAppLayout() {
 
   return (
     <div className="app-shell">
+      {/* Non-blocking background sync indicator bar */}
+      {(isLoadingHomes || isLoadingDb) && <div className="top-sync-bar" title="Syncing catalog..." />}
+
       {/* Top Header shown on internal portal routes */}
       {!isLoginPage && (
         <Header

@@ -3,6 +3,8 @@ import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
 import { LEGACY_DATA } from '../../utils/legacyData.js';
+import { FuneralHomeCardSkeleton } from '../common/SkeletonLoader.jsx';
+import ShimmerImage from '../common/ShimmerImage.jsx';
 
 export default function LocationSearch({ onContinue }) {
   const {
@@ -246,21 +248,14 @@ export default function LocationSearch({ onContinue }) {
         </div>
       </form>
 
-      {/* Loading State for empty initial cache */}
+      {/* Loading Skeleton State when directory is loading */}
       {isLoading && allHomes.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              border: '3px solid #e2e8f0',
-              borderTopColor: '#183655',
-              borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite',
-              margin: '0 auto 14px',
-            }}
-          />
-          <span>Loading funeral homes directory...</span>
+        <div style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', color: '#183655', fontWeight: 650, fontSize: '13.5px' }}>
+            <div className="app-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+            <span>{lang === 'es' ? 'Cargando directorio de funerarias...' : 'Loading funeral homes directory...'}</span>
+          </div>
+          <FuneralHomeCardSkeleton count={6} />
         </div>
       )}
 
@@ -282,13 +277,13 @@ export default function LocationSearch({ onContinue }) {
           }}
         >
           <div
+            className="app-spinner"
             style={{
-              width: '12px',
-              height: '12px',
-              border: '2px solid #93c5fd',
+              width: '13px',
+              height: '13px',
+              borderWidth: '2px',
+              borderColor: '#93c5fd',
               borderTopColor: '#1d4ed8',
-              borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite',
             }}
           />
           <span>{lang === 'es' ? 'Sincronizando directorio en vivo...' : 'Syncing live funeral homes directory...'}</span>
@@ -355,7 +350,7 @@ export default function LocationSearch({ onContinue }) {
                   }
                 }}
               >
-                {/* Funeral Home Photo (as explicitly requested: "iss mai images v hai ju data show hu rha so in ki images v show krni hai") */}
+                {/* Funeral Home Photo with smooth shimmer */}
                 <div
                   style={{
                     width: '74px',
@@ -368,19 +363,13 @@ export default function LocationSearch({ onContinue }) {
                     boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
                   }}
                 >
-                  <img
+                  <ShimmerImage
                     src={imageUrl}
                     alt={home.name}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      display: 'block',
-                    }}
-                    onError={(e) => {
-                      e.currentTarget.src =
-                        'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=400&q=80';
-                    }}
+                    width="100%"
+                    height="100%"
+                    objectFit="cover"
+                    fallbackSrc="https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=400&q=80"
                   />
                 </div>
 

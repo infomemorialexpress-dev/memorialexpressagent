@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
+import ShimmerImage from '../common/ShimmerImage.jsx';
 
 export default function ConfirmHome({ onBack, onContinue }) {
   const { lang, selectedFuneralHome, quote, calculation } = useQuote();
@@ -82,19 +83,13 @@ export default function ConfirmHome({ onBack, onContinue }) {
               boxShadow: '0 4px 12px rgba(24, 54, 85, 0.08)',
             }}
           >
-            <img
+            <ShimmerImage
               src={imageUrl}
               alt={home.name}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: 'block',
-              }}
-              onError={(e) => {
-                e.currentTarget.src =
-                  'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=800&q=80';
-              }}
+              width="100%"
+              height="100%"
+              objectFit="cover"
+              fallbackSrc="https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=800&q=80"
             />
             {home.program && (
               <div

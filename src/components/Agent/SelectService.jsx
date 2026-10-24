@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
+import { ServiceCardSkeleton } from '../common/SkeletonLoader.jsx';
 
 const CANONICAL_SERVICES_FALLBACK = [
   { _id: 'two_day', name: 'Two-day service', category: 'Traditional', specifications: 'Traditional 2-day viewing & chapel service', section1Price: 3800, section2Price: 1200 },
@@ -145,7 +146,7 @@ export default function SelectService({ onBack, onContinue }) {
       </p>
 
       {/* Non-blocking live background sync badge */}
-      {isSyncing && (
+      {isSyncing && services.length > 0 && (
         <div
           style={{
             display: 'inline-flex',
@@ -162,16 +163,27 @@ export default function SelectService({ onBack, onContinue }) {
           }}
         >
           <div
+            className="app-spinner"
             style={{
-              width: '12px',
-              height: '12px',
-              border: '2px solid #93c5fd',
+              width: '13px',
+              height: '13px',
+              borderWidth: '2px',
+              borderColor: '#93c5fd',
               borderTopColor: '#1d4ed8',
-              borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite',
             }}
           />
           <span>{lang === 'es' ? 'Sincronizando tarifas en vivo...' : 'Syncing live service pricing...'}</span>
+        </div>
+      )}
+
+      {/* Loading Skeleton when no services ready yet */}
+      {isSyncing && services.length === 0 && (
+        <div style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', color: '#183655', fontWeight: 650, fontSize: '13.5px' }}>
+            <div className="app-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+            <span>{lang === 'es' ? 'Cargando servicios disponibles...' : 'Loading available services...'}</span>
+          </div>
+          <ServiceCardSkeleton count={6} />
         </div>
       )}
 

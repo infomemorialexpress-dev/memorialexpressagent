@@ -106,6 +106,8 @@ export function QuoteProvider({ children }) {
 
   // Fetch catalog snapshot
   const loadAgentCatalog = useCallback(async () => {
+    setIsLoadingDb(true);
+    setDbError(null);
     try {
       const res = await fetchAgentQuoteDb();
       if (res.success && res.db) {
@@ -117,6 +119,8 @@ export function QuoteProvider({ children }) {
     } catch (err) {
       console.error('[QuoteContext] Failed to load agent catalog:', err);
       setDbError(err.message || 'Failed to load catalog');
+    } finally {
+      setIsLoadingDb(false);
     }
   }, [funeralHomes]);
 

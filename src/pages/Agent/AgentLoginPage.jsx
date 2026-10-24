@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import InputField from '../../components/common/InputField.jsx';
 import Button from '../../components/common/Button.jsx';
 import { BrandFeatherIcon } from '../../components/common/Header.jsx';
+import LoadingSpinner from '../../components/common/LoadingSpinner.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useQuote } from '../../context/QuoteContext.jsx';
 
@@ -54,6 +55,26 @@ export default function AgentLoginPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#f5f7fa',
+        }}
+      >
+        <LoadingSpinner
+          size="lg"
+          label="Checking agent credentials..."
+          subtext="Connecting to Memorial Express"
+        />
+      </div>
+    );
+  }
 
   return (
     <div

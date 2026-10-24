@@ -3,6 +3,7 @@ import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import { formatMoney, SERVICES } from '../../utils/quoteLogic.js';
 import { generateFSAPdf } from '../../utils/FSA_Generator.js';
+import { QuoteSummarySkeleton } from '../common/SkeletonLoader.jsx';
 
 export default function QuoteSummary({ onBack }) {
   const { lang, quote, calculation, db, addToast } = useQuote();
@@ -12,19 +13,23 @@ export default function QuoteSummary({ onBack }) {
 
   if (!calculation) {
     return (
-      <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
+      <div style={{ maxWidth: '820px', margin: '0 auto', padding: '20px 0' }}>
         <div
           style={{
-            width: 36,
-            height: 36,
-            border: '3px solid #e2e8f0',
-            borderTopColor: '#183655',
-            borderRadius: '50%',
-            animation: 'spin 0.8s linear infinite',
-            margin: '0 auto 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px',
+            marginBottom: '20px',
+            color: '#183655',
+            fontWeight: 650,
+            fontSize: '14.5px',
           }}
-        />
-        <span>{isEs ? 'Calculando cotización oficial...' : 'Calculating official quote...'}</span>
+        >
+          <div className="app-spinner" style={{ width: '20px', height: '20px', borderWidth: '2.5px' }} />
+          <span>{isEs ? 'Calculando cotización oficial y ahorros...' : 'Calculating official quote & package savings...'}</span>
+        </div>
+        <QuoteSummarySkeleton />
       </div>
     );
   }
@@ -957,6 +962,7 @@ export default function QuoteSummary({ onBack }) {
           variant="primary"
           onClick={handlePrintSavePdf}
           disabled={isGeneratingPdf}
+          loading={isGeneratingPdf}
           style={{
             backgroundColor: '#183655',
             borderColor: '#183655',
@@ -970,7 +976,7 @@ export default function QuoteSummary({ onBack }) {
             boxShadow: '0 3px 8px rgba(24, 54, 85, 0.25)',
           }}
         >
-          <span style={{ fontSize: '18px' }}>🖨️</span>
+          {!isGeneratingPdf && <span style={{ fontSize: '18px' }}>🖨️</span>}
           <span>
             {isGeneratingPdf
               ? (isEs ? 'Generando PDF...' : 'Generating PDF...')

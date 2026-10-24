@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { formatMoney } from '../../utils/quoteLogic.js';
+import ShimmerImage from '../common/ShimmerImage.jsx';
 
 export default function MerchandiseCard({
   casket,
@@ -24,21 +25,18 @@ export default function MerchandiseCard({
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="casket-img-frame">
-        {casket.image ? (
-          <img
-            src={casket.image}
-            alt={casket.name}
-            loading="lazy"
-            style={{
-              transform: isHovered ? 'scale(1.12)' : 'scale(1.02)',
-              transition: 'transform 0.25s ease'
-            }}
-          />
-        ) : (
-          <div style={{ color: '#94a3b8', fontSize: 13, fontStyle: 'italic' }}>
-            No photo available
-          </div>
-        )}
+        <ShimmerImage
+          src={casket.image}
+          alt={casket.name}
+          width="100%"
+          height="100%"
+          objectFit="contain"
+          imgStyle={{
+            transform: isHovered ? 'scale(1.12)' : 'scale(1.02)',
+            transition: 'transform 0.25s ease'
+          }}
+          fallbackText="No photo available"
+        />
       </div>
 
       <div className="merchandise-info">
