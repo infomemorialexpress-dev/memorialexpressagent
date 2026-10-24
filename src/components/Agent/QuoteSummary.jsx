@@ -31,6 +31,10 @@ export default function QuoteSummary({ onBack }) {
 
   // ================= 1. STATIC (HARDCODED) ELEMENTS =================
   // Hardcoded Section I itemized service breakdown and savings per client requirements (always totaling $3,395.00)
+  const selectedServiceS1 = Number(calculation.packageData?.section1 || quote.selectedServiceObject?.section1Price || 0);
+  const effectiveServicesTotal = selectedServiceS1 > 0 ? selectedServiceS1 : 3395.00;
+  const packageSavingsAmount = Math.round((effectiveServicesTotal - 4395.00) * 100) / 100;
+
   const STATIC_SECTION_1_SERVICES = [
     { desc: isEs ? 'Arreglos y servicios del personal profesional' : 'Arrangements and professional staff', amount: 2050.00 },
     { desc: isEs ? 'Traslado del difunto (25 millas)' : 'Transfer (25 miles)', amount: 695.00 },
@@ -40,10 +44,10 @@ export default function QuoteSummary({ onBack }) {
     { desc: isEs ? 'Servicio funerario / memorial' : 'Funeral/memorial service', amount: 150.00 },
     { desc: isEs ? 'Carroza funeraria' : 'Funeral coach', amount: 375.00 },
     { desc: isEs ? 'Vehículos utilitarios / otros' : 'Utility vehicles / other', amount: 100.00 },
-    { desc: isEs ? 'Ahorro de paquete' : 'Package savings', amount: -1000.00 },
+    { desc: isEs ? 'Ahorro de paquete' : 'Package savings', amount: packageSavingsAmount },
   ];
 
-  const STATIC_SERVICES_TOTAL = 3395.00;
+  const STATIC_SERVICES_TOTAL = effectiveServicesTotal;
   const STATIC_DISPOSITION_PERMIT_FEE = 12.00;
   const STATIC_DEATH_CERT_UNIT_PRICE = (quote.deathCertUnitPrice && quote.deathCertUnitPrice !== 26 && quote.deathCertUnitPrice !== 24)
     ? Number(quote.deathCertUnitPrice)
@@ -71,7 +75,7 @@ export default function QuoteSummary({ onBack }) {
   const dynamicModel = casket.model || casket.modelNumber || '—';
 
   const dynamicTotalMerchandise = dynamicCasketPrice;
-  const dynamicTotalGuaranteed = STATIC_SERVICES_TOTAL + dynamicTotalMerchandise;
+  const dynamicTotalGuaranteed = effectiveServicesTotal + dynamicTotalMerchandise;
 
   // Non-Guaranteed Cash Advance Items:
   // 1. Dynamic Death certificates: quantity * $24

@@ -27,6 +27,10 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const borderLight = [203, 213, 225];
 
   // ================= 1. STATIC (HARDCODED) ELEMENTS =================
+  const selectedServiceS1 = Number(calculation?.packageData?.section1 || quote?.selectedServiceObject?.section1Price || 0);
+  const effectiveServicesTotal = selectedServiceS1 > 0 ? selectedServiceS1 : 3395.0;
+  const packageSavingsAmount = Math.round((effectiveServicesTotal - 4395.0) * 100) / 100;
+
   const STATIC_SECTION_1_SERVICES = [
     { desc: isEs ? 'Arreglos y personal profesional' : 'Arrangements and professional staff', amount: 2050.0 },
     { desc: isEs ? 'Traslado (25 millas)' : 'Transfer (25 miles)', amount: 695.0 },
@@ -36,10 +40,10 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
     { desc: isEs ? 'Servicio funerario / memorial' : 'Funeral/memorial service', amount: 150.0 },
     { desc: isEs ? 'Carroza funeraria' : 'Funeral coach', amount: 375.0 },
     { desc: isEs ? 'Vehículos utilitarios / otros' : 'Utility vehicles / other', amount: 100.0 },
-    { desc: isEs ? 'Ahorro de paquete' : 'Package savings', amount: -1000.0 },
+    { desc: isEs ? 'Ahorro de paquete' : 'Package savings', amount: packageSavingsAmount },
   ];
 
-  const STATIC_SERVICES_TOTAL = 3395.0;
+  const STATIC_SERVICES_TOTAL = effectiveServicesTotal;
   const STATIC_DISPOSITION_PERMIT_FEE = 12.0;
   const STATIC_DEATH_CERT_UNIT_PRICE = (quote?.deathCertUnitPrice && quote.deathCertUnitPrice !== 26 && quote.deathCertUnitPrice !== 24)
     ? Number(quote.deathCertUnitPrice)
@@ -65,7 +69,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const dynamicModel = casket.model || casket.modelNumber || '—';
 
   const dynamicTotalMerchandise = dynamicCasketPrice;
-  const dynamicTotalGuaranteed = STATIC_SERVICES_TOTAL + dynamicTotalMerchandise;
+  const dynamicTotalGuaranteed = effectiveServicesTotal + dynamicTotalMerchandise;
 
   // Dynamic Non-guaranteed calculations
   const dynamicCertsCount = Math.max(1, Number(calculation?.certsCount || quote?.certs || quote?.deathCertCount || 1));
