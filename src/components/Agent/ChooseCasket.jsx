@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
-import { formatMoney } from '../../utils/quoteLogic.js';
+import { formatMoney, CATALOG_CASKETS, isEligibleCasket } from '../../utils/quoteLogic.js';
 
 export default function ChooseCasket({ onBack, onContinue }) {
   const {
@@ -50,23 +50,61 @@ export default function ChooseCasket({ onBack, onContinue }) {
     let isMounted = true;
 
     async function fetchCaskets() {
-      if (!funeralHomeId) {
-        setIsLoading(false);
-        return;
-      }
-
       setIsLoading(true);
       setError(null);
+
+      // Prepare canonical fallback items
+      const fallbackList = (CATALOG_CASKETS || []).map((cat) => ({
+        _id: cat.id,
+        id: cat.id,
+        name: cat.name,
+        listPrice: cat.price,
+        price: cat.price,
+        imageUrl: cat.image,
+        image: cat.image,
+        specifications: cat.description,
+        description: cat.description,
+        productCode: cat.productCode,
+        assignment: 'Global (*)',
+        home: cat.home || 'optima'
+      }));
+
       try {
-        const response = await api.get(`/catalog/location/${funeralHomeId}?type=CASKET`);
-        const data = response.data || [];
+        let backendItems = [];
+        if (funeralHomeId) {
+          try {
+            const response = await api.get(`/catalog/location/${funeralHomeId}?type=CASKET`);
+            backendItems = Array.isArray(response.data) ? response.data : [];
+          } catch (apiErr) {
+            console.warn('[ChooseCasket] Live backend fetch error, falling back to catalog:', apiErr);
+          }
+        }
+
+        // Combine backend items with canonical catalog items to guarantee complete selection
+        const rawCombined = [...backendItems];
+        for (const cat of fallbackList) {
+          const catName = (cat.name || '').trim().toLowerCase();
+          const alreadyExists = rawCombined.some(
+            (item) => (item.name || '').trim().toLowerCase() === catName
+          );
+          if (!alreadyExists) {
+            rawCombined.push(cat);
+          }
+        }
+
+        // Filter eligible caskets for this home / service
+        const eligible = rawCombined.filter((c) =>
+          isEligibleCasket(c, funeralHomeId || quote.home, quote.service)
+        );
+
+        const listToProcess = eligible.length > 0 ? eligible : (rawCombined.length > 0 ? rawCombined : fallbackList);
 
         // Deduplicate and canonicalize
         const unique = [];
         const seen = new Set();
-        for (const item of data) {
+        for (const item of listToProcess) {
           const key = (item.name || '').trim().toLowerCase();
-          if (!seen.has(key)) {
+          if (key && !seen.has(key)) {
             seen.add(key);
             unique.push(item);
           }
@@ -97,10 +135,9 @@ export default function ChooseCasket({ onBack, onContinue }) {
           }
         }
       } catch (err) {
-        console.error('[ChooseCasket] Failed to fetch caskets:', err);
+        console.error('[ChooseCasket] Failed to process caskets:', err);
         if (isMounted) {
-          setError(err.userMessage || 'Could not load caskets from server.');
-          addToast('Warning: Unable to load live caskets from server.', 'error');
+          setCaskets(fallbackList);
         }
       } finally {
         if (isMounted) {
@@ -114,7 +151,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
     return () => {
       isMounted = false;
     };
-  }, [funeralHomeId]);
+  }, [funeralHomeId, quote.service]);
 
   const handleCardClick = (casket) => {
     setLocalSelectedCasket(casket);

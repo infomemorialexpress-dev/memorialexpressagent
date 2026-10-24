@@ -43,12 +43,30 @@ export function t(text, lang = 'en', directEs = null) {
 
 // Check if service requires a casket
 export function isCasketNeeded(service) {
-  return CASKET_TYPES.includes(service);
+  if (!service) return true;
+  if (typeof service === 'object') {
+    service = service.name || service.category || service.id || service._id || '';
+  }
+  const s = String(service).toLowerCase();
+  // Pure cremations that don't need a casket
+  if (s === 'direct_cremation' || s === 'memorial_cremation' || s.includes('direct cremation') || s.includes('memorial cremation')) {
+    return false;
+  }
+  if (CASKET_TYPES.includes(service)) return true;
+  if (s.includes('burial') || s.includes('traditional') || s.includes('funeral') || s.includes('two') || s.includes('one') || s.includes('ship') || s.includes('graveside') || s.includes('casket') || s.includes('complete')) {
+    return true;
+  }
+  if (CREM_TYPES.includes(service) || s.includes('cremat')) {
+    return false;
+  }
+  return true;
 }
 
 // Check if service is a cremation
 export function isCremation(service) {
-  return CREM_TYPES.includes(service);
+  if (!service) return false;
+  const s = String(service).toLowerCase();
+  return CREM_TYPES.includes(service) || s.includes('cremat');
 }
 
 // Check if service is a ship out
@@ -56,26 +74,54 @@ export function isShipOut(service) {
   return service === 'ship_traditional' || service === 'ship_direct';
 }
 
+export function resolveHomeSlug(homeOrId, db) {
+  if (!homeOrId) return 'optima';
+  let name = '';
+  let id = '';
+  if (typeof homeOrId === 'object') {
+    name = (homeOrId.name || '').toLowerCase();
+    id = String(homeOrId._id || homeOrId.id || '').toLowerCase();
+  } else {
+    id = String(homeOrId).toLowerCase();
+    const homeObj = (db?.homes || []).find(h => String(h.id || h._id).toLowerCase() === id);
+    if (homeObj) {
+      name = (homeObj.name || '').toLowerCase();
+    }
+  }
+  if (name.includes('western') || id === 'western') return 'western';
+  if (name.includes('felipe') || name.includes('bagues') || id === 'felipe') return 'felipe';
+  if (name.includes('murillo') || id === 'murillo') return 'murillo';
+  return 'optima';
+}
+
 // Retrieve package entry from database
 export function getPackage(db, homeId, service) {
   if (!db || !db.packages) return null;
-  return db.packages[`${homeId}|${service}`] || null;
+  if (db.packages[`${homeId}|${service}`]) {
+    return db.packages[`${homeId}|${service}`];
+  }
+  const slug = resolveHomeSlug(homeId, db);
+  return db.packages[`${slug}|${service}`] || null;
 }
 
 // Check casket eligibility
-export function isEligibleCasket(casket, homeId, service) {
+export function isEligibleCasket(casket, homeId, service, db = null) {
   if (!casket) return false;
-  if (homeId === 'murillo') {
-    return casket.home === 'murillo';
+  if (casket.assignment === 'Global (*)' || casket.assignment === '*' || casket.home === '*' || !casket.home) {
+    return true;
   }
-  if (homeId === 'western') {
-    return casket.home === 'western';
+  const slug = resolveHomeSlug(homeId, db);
+  if (slug === 'murillo') {
+    return casket.home === 'murillo' || casket.home === 'optima';
   }
-  if (homeId === 'felipe') {
+  if (slug === 'western') {
+    return casket.home === 'western' || casket.home === 'optima';
+  }
+  if (slug === 'felipe') {
     if (service === 'ship_direct' || service === 'ship_traditional') {
       return casket.id && casket.id.startsWith('felipe_ship_');
     }
-    return casket.home === 'felipe' && !casket.id.startsWith('felipe_ship_');
+    return (casket.home === 'felipe' && !casket.id.startsWith('felipe_ship_')) || casket.home === 'optima';
   }
   // Optima or default
   return casket.home === 'optima' || casket.home === '*' || !casket.home;
@@ -86,13 +132,15 @@ export function getMatchedLocation(home, searchLocation) {
   if (!home) return null;
   const locations = home.locations && home.locations.length
     ? home.locations
-    : [{ city: home.city, zip: home.zip, county: home.county, surcharge: 0 }];
+    : (home.chapels && home.chapels.length
+        ? home.chapels
+        : [{ city: home.city, zip: home.zipCode || home.zip, county: home.county, surcharge: 0 }]);
 
   if (!searchLocation) return locations[0] || null;
   const q = searchLocation.trim().toLowerCase();
   return locations.find(l =>
     (l.city && l.city.toLowerCase().includes(q)) ||
-    (l.zip && l.zip.includes(q)) ||
+    (l.zip && String(l.zip).includes(q)) ||
     (l.county && l.county.toLowerCase().includes(q))
   ) || locations[0];
 }
@@ -100,10 +148,10 @@ export function getMatchedLocation(home, searchLocation) {
 // Core Mathematical State Logic for MemorialExpress
 export function calculateQuote(q, db) {
   const h = q.home;
-  const homeObj = (db.homes || []).find(x => x.id === h);
+  const homeObj = q.selectedHomeObj || (db.homes || []).find(x => x.id === h || x._id === h);
   const p = getPackage(db, h, q.service) || { section1: 0, section2: 0 };
   const allCaskets = db.caskets || [];
-  let casket = allCaskets.find(x => (x.id === q.casket || x._id === q.casket) && isEligibleCasket(x, h, q.service));
+  let casket = allCaskets.find(x => (x.id === q.casket || x._id === q.casket) && isEligibleCasket(x, h, q.service, db));
   if (!casket && q.selectedCasketObject) {
     casket = {
       ...q.selectedCasketObject,
@@ -111,13 +159,14 @@ export function calculateQuote(q, db) {
     };
   }
 
-  const westernDirectCremation = h === 'western' && q.service === 'direct_cremation';
-  const westernRentalCasket = h === 'western' && q.service === 'traditional_cremation' ? 800 : 0;
-  const optimaRentalCasket = h === 'optima' && q.service === 'traditional_cremation' ? 700 : 0;
+  const homeSlug = resolveHomeSlug(h, db);
+  const westernDirectCremation = homeSlug === 'western' && q.service === 'direct_cremation';
+  const westernRentalCasket = homeSlug === 'western' && q.service === 'traditional_cremation' ? 800 : 0;
+  const optimaRentalCasket = homeSlug === 'optima' && q.service === 'traditional_cremation' ? 700 : 0;
   const brassUrn = westernDirectCremation ? 395 : 0;
-  const felipeRental = h === 'felipe' && q.service === 'traditional_cremation' ? 1095 : 0;
-  const felipeAlternative = h === 'felipe' && ['memorial_cremation', 'direct_cremation'].includes(q.service) ? 225 : 0;
-  const felipeAirTray = h === 'felipe' && isShipOut(q.service) ? 250 : 0;
+  const felipeRental = homeSlug === 'felipe' && q.service === 'traditional_cremation' ? 1095 : 0;
+  const felipeAlternative = homeSlug === 'felipe' && ['memorial_cremation', 'direct_cremation'].includes(q.service) ? 225 : 0;
+  const felipeAirTray = homeSlug === 'felipe' && isShipOut(q.service) ? 250 : 0;
 
   // Urn calculation
   let urn = 0;
@@ -183,48 +232,67 @@ export function calculateQuote(q, db) {
   const escortQty = escorts ? Math.max(h === 'felipe' ? 2 : 1, Math.floor(Number(q.escortQty) || 1)) : 0;
 
   // Breakdown of user non-guaranteed add-ons
-  const added = activeAddons
-    .filter(a =>
-      !['flowers', 'murillo_flowers', 'felipe_flowers', 'memorial', 'escorts', 'murillo_escort', 'air_tray'].includes(a.id) &&
-      !a.id.startsWith('western_') &&
-      !a.id.startsWith('felipe_')
-    )
-    .map(a => ({
-      id: a.id,
-      name: a.name,
-      price: h === 'felipe' && a.id === 'doves'
-        ? (Object.prototype.hasOwnProperty.call(overrides, a.id) ? Math.max(0, Number(overrides[a.id]) || 0) : 350)
-        : getItemPrice(a),
-      taxable: !!a.taxable
-    }));
+  let added = [];
+  if (Array.isArray(q.selectedAddonObjects) && q.selectedAddonObjects.length > 0) {
+    added = q.selectedAddonObjects
+      .filter(a => Number(a.totalPrice ?? a.price ?? 0) > 0 && !String(a.id || '').startsWith('western_'))
+      .map(a => {
+        const qty = Number(a.quantity) || 1;
+        const unit = Number(a.unitPrice ?? (a.quantity ? (a.price / a.quantity) : a.price) ?? 0);
+        const total = Number(a.totalPrice ?? (qty * unit) ?? a.price ?? 0);
+        return {
+          id: a.id,
+          name: qty > 1 ? `${a.name} (${qty} × ${formatMoney(unit)})` : a.name,
+          price: total,
+          unitPrice: unit,
+          quantity: qty,
+          taxable: !!a.taxable
+        };
+      });
+  } else {
+    added = activeAddons
+      .filter(a =>
+        !['flowers', 'murillo_flowers', 'felipe_flowers', 'memorial', 'escorts', 'murillo_escort', 'air_tray'].includes(a.id) &&
+        !a.id.startsWith('western_') &&
+        !a.id.startsWith('felipe_')
+      )
+      .map(a => ({
+        id: a.id,
+        name: a.name,
+        price: h === 'felipe' && a.id === 'doves'
+          ? (Object.prototype.hasOwnProperty.call(overrides, a.id) ? Math.max(0, Number(overrides[a.id]) || 0) : 350)
+          : getItemPrice(a),
+        taxable: !!a.taxable
+      }));
 
-  for (const a of felipeCashAddons) {
-    added.push({ id: a.id, name: a.name, price: getItemPrice(a), taxable: false });
+    for (const a of felipeCashAddons) {
+      added.push({ id: a.id, name: a.name, price: getItemPrice(a), taxable: false });
+    }
+
+    if (flower) {
+      added.push({
+        id: flower.id,
+        name: `Flowers (${flowersQty} arrangement${flowersQty === 1 ? '' : 's'})`,
+        price: getItemPrice(flower) * flowersQty,
+        taxable: !!flower.taxable
+      });
+    }
+
+    if (escorts) {
+      added.push({
+        id: escorts.id,
+        name: h === 'felipe'
+          ? `Motorcycle escorts (${escortQty}; 10 vehicles, 25 miles included)`
+          : `Funeral escorts (${escortQty})`,
+        price: escortQty * (h === 'felipe' ? 200 : getItemPrice(escorts)),
+        taxable: false
+      });
+    }
   }
 
-  if (flower) {
-    added.push({
-      id: flower.id,
-      name: `Flowers (${flowersQty} arrangement${flowersQty === 1 ? '' : 's'})`,
-      price: getItemPrice(flower) * flowersQty,
-      taxable: !!flower.taxable
-    });
-  }
-
-  if (escorts) {
-    added.push({
-      id: escorts.id,
-      name: h === 'felipe'
-        ? `Motorcycle escorts (${escortQty}; 10 vehicles, 25 miles included)`
-        : `Funeral escorts (${escortQty})`,
-      price: escortQty * (h === 'felipe' ? 200 : getItemPrice(escorts)),
-      taxable: false
-    });
-  }
-
-  const certsCount = Math.max(1, Number(q.certs) || 1);
-  const deathCertFee = Number(db.fees?.deathCertificate) || 26;
-  const dispositionPermitFee = Number(db.fees?.dispositionPermit) || 12;
+  const certsCount = Math.max(1, Number(q.certs || q.deathCertCount || 1));
+  const deathCertFee = Number(q.deathCertUnitPrice || 94);
+  const dispositionPermitFee = Number(q.dispositionPermitFee || db.fees?.dispositionPermit || 12);
   const mandatory = dispositionPermitFee + (certsCount * deathCertFee);
 
   const memorialPrice = h === 'murillo' ? 0 : (memorial ? getItemPrice(memorial) : 0);

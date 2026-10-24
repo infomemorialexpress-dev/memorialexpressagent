@@ -10,13 +10,16 @@ export default function LocationSearch({ onContinue }) {
     selectHome,
     selectedFuneralHome,
     funeralHomes: contextHomes,
+    db,
     addToast
   } = useQuote();
 
   const [searchFilter, setSearchFilter] = useState('City');
   const [searchQuery, setSearchQuery] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
-  const [allHomes, setAllHomes] = useState(contextHomes || []);
+  const [allHomes, setAllHomes] = useState(
+    (contextHomes && contextHomes.length > 0) ? contextHomes : (db?.homes || [])
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [localSelectedId, setLocalSelectedId] = useState(
     selectedFuneralHome?._id || selectedFuneralHome?.id || quote.home || ''
@@ -29,11 +32,17 @@ export default function LocationSearch({ onContinue }) {
       setIsLoading(true);
       try {
         const res = await api.get('/funeral-homes');
-        if (isMounted && res.data && Array.isArray(res.data)) {
+        if (isMounted && res.data && Array.isArray(res.data) && res.data.length > 0) {
           setAllHomes(res.data);
+        } else if (isMounted && db?.homes?.length > 0) {
+          setAllHomes(db.homes);
         }
       } catch (err) {
         console.warn('[LocationSearch] Failed to fetch /funeral-homes, using context/fallback:', err);
+        if (isMounted) {
+          const fallback = (contextHomes && contextHomes.length > 0) ? contextHomes : (db?.homes || []);
+          if (fallback.length > 0) setAllHomes(fallback);
+        }
       } finally {
         if (isMounted) setIsLoading(false);
       }

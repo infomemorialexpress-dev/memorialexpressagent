@@ -67,20 +67,31 @@ export function QuoteProvider({ children }) {
     setIsLoadingHomes(true);
     try {
       const response = await api.get('/funeral-homes');
-      const homes = response.data || [];
-      setFuneralHomes(homes);
-      setDb(prev => ({
-        ...prev,
-        homes: homes.length > 0 ? homes : (prev.homes || [])
-      }));
-      return homes;
+      const homes = Array.isArray(response.data) ? response.data : [];
+      if (homes.length > 0) {
+        setFuneralHomes(homes);
+        setDb(prev => ({
+          ...prev,
+          homes: homes
+        }));
+        return homes;
+      }
+      throw new Error('No funeral homes returned by backend');
     } catch (err) {
-      console.warn('[QuoteContext] Could not fetch /funeral-homes, using fallback snapshot:', err);
-      return [];
+      console.warn('[QuoteContext] Could not fetch /funeral-homes from backend, using fallback snapshot:', err);
+      const fallback = (db.homes && db.homes.length > 0) ? db.homes : (LEGACY_DATA?.initialDb?.homes || []);
+      if (fallback.length > 0) {
+        setFuneralHomes(fallback);
+        setDb(prev => ({
+          ...prev,
+          homes: fallback
+        }));
+      }
+      return fallback;
     } finally {
       setIsLoadingHomes(false);
     }
-  }, []);
+  }, [db.homes]);
 
   useEffect(() => {
     fetchFuneralHomes();
@@ -93,7 +104,7 @@ export function QuoteProvider({ children }) {
       if (res.success && res.db) {
         setDb(prev => ({
           ...res.db,
-          homes: funeralHomes.length > 0 ? funeralHomes : res.db.homes
+          homes: (prev.homes && prev.homes.length > 0) ? prev.homes : (funeralHomes.length > 0 ? funeralHomes : res.db.homes)
         }));
       }
     } catch (err) {
@@ -157,13 +168,15 @@ export function QuoteProvider({ children }) {
     if (serviceOrId && typeof serviceOrId === 'object') {
       serviceObj = serviceOrId;
       const nameLower = (serviceObj.name || '').toLowerCase();
-      if (nameLower.includes('two-day') || nameLower.includes('two day')) serviceId = 'two_day';
-      else if (nameLower.includes('one-day') || nameLower.includes('one day')) serviceId = 'one_day';
+      if (nameLower.includes('two-day') || nameLower.includes('two day') || nameLower.includes('2 day')) serviceId = 'two_day';
+      else if (nameLower.includes('one-day') || nameLower.includes('one day') || nameLower.includes('1 day')) serviceId = 'one_day';
+      else if (nameLower.includes('traditional') && !nameLower.includes('cremat')) serviceId = 'one_day';
+      else if (nameLower.includes('graveside') || nameLower.includes('burial') || nameLower.includes('complete funeral')) serviceId = 'one_day';
       else if (nameLower.includes('traditional cremation')) serviceId = 'traditional_cremation';
       else if (nameLower.includes('memorial cremation')) serviceId = 'memorial_cremation';
-      else if (nameLower.includes('direct cremation')) serviceId = 'direct_cremation';
+      else if (nameLower.includes('direct cremation') || nameLower.includes('cremat')) serviceId = 'direct_cremation';
       else if (nameLower.includes('ship out with') || nameLower.includes('ship traditional')) serviceId = 'ship_traditional';
-      else if (nameLower.includes('direct ship')) serviceId = 'ship_direct';
+      else if (nameLower.includes('direct ship') || nameLower.includes('ship')) serviceId = 'ship_direct';
       else serviceId = serviceObj._id || serviceObj.id || serviceObj.name;
     } else if (typeof serviceOrId === 'string') {
       serviceId = serviceOrId;
