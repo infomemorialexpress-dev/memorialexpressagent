@@ -55,9 +55,6 @@ function AgentAppLayout() {
 
   return (
     <div className="app-shell">
-      {/* Non-blocking background sync indicator bar */}
-      {(isLoadingHomes || isLoadingDb) && <div className="top-sync-bar" title="Syncing catalog..." />}
-
       {/* Top Header shown on internal portal routes */}
       {!isLoginPage && (
         <Header

@@ -20,6 +20,15 @@ export function BrandFeatherIcon({ className, style }) {
   );
 }
 
+function getInitials(name) {
+  if (!name) return 'AG';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
 export default function Header({ lang, onLanguageToggle }) {
   const { isAuthenticated, agentUser, logout } = useAuth();
   const { addToast } = useQuote();
@@ -49,69 +58,66 @@ export default function Header({ lang, onLanguageToggle }) {
         {onLanguageToggle && (
           <button
             type="button"
-            className="lang-toggle-btn"
+            className="header-lang-btn"
             onClick={onLanguageToggle}
             title={lang === 'es' ? 'Switch to English' : 'Cambiar a Español'}
           >
-            <span>🌐</span>
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
             <span>{lang === 'es' ? 'Español' : 'English'}</span>
           </button>
         )}
 
         {isAuthenticated && agentUser && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '6px' }}>
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-end',
-                fontSize: '12px',
-                lineHeight: 1.25,
-              }}
-            >
-              <span style={{ fontWeight: 700, color: '#183655' }}>
+          <div className="header-user-badge">
+            <div className="header-user-avatar">
+              {getInitials(agentUser.fullName || agentUser.email)}
+            </div>
+
+            <div className="header-user-meta">
+              <span className="header-user-name">
                 {agentUser.fullName || agentUser.email}
               </span>
-              <span
-                style={{
-                  fontSize: '10.5px',
-                  color: '#67788e',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  fontWeight: 600,
-                }}
-              >
+              <span className="header-user-role">
                 Agent {agentUser.licenseId ? `• ${agentUser.licenseId}` : ''}
               </span>
             </div>
 
+            <div className="header-divider-v" />
+
             <button
               type="button"
               onClick={handleLogout}
-              style={{
-                background: '#f1f5f9',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                padding: '6px 12px',
-                fontSize: '12px',
-                fontWeight: 600,
-                color: '#475569',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = '#fee2e2';
-                e.currentTarget.style.borderColor = '#fca5a5';
-                e.currentTarget.style.color = '#991b1b';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = '#f1f5f9';
-                e.currentTarget.style.borderColor = '#cbd5e1';
-                e.currentTarget.style.color = '#475569';
-              }}
+              className="header-logout-btn"
               title="Sign Out"
             >
-              Sign Out
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              <span>Sign Out</span>
             </button>
           </div>
         )}

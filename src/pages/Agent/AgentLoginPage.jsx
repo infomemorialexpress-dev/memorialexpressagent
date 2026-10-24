@@ -10,7 +10,6 @@ import { useQuote } from '../../context/QuoteContext.jsx';
 export default function AgentLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
@@ -317,66 +316,6 @@ export default function AgentLoginPage() {
               </button>
             </div>
 
-            {/* Remember Me & Help Row */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '8px',
-                margin: '-4px 0 22px 0',
-                fontSize: '13px',
-              }}
-            >
-              <label
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  color: '#253851',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  fontWeight: 500,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  disabled={isSubmitting}
-                  style={{
-                    width: '16px',
-                    height: '16px',
-                    accentColor: '#183655',
-                    cursor: 'pointer',
-                    margin: 0,
-                  }}
-                />
-                Remember me
-              </label>
-
-              <button
-                type="button"
-                onClick={() => addToast('Please contact your administrator to reset agent credentials.', 'info')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  color: '#183655',
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  textDecoration: 'none',
-                  transition: 'color 0.2s',
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.color = '#1f456c')}
-                onMouseOut={(e) => (e.currentTarget.style.color = '#183655')}
-              >
-                Forgot password?
-              </button>
-            </div>
-
             {/* Submit Action */}
             <Button
               variant="primary"
@@ -394,66 +333,12 @@ export default function AgentLoginPage() {
                 fontWeight: 650,
                 borderRadius: '10px',
                 cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                marginTop: '10px',
               }}
             >
               {isSubmitting ? 'Signing In...' : 'Sign In'}
             </Button>
           </form>
-        </div>
-
-        {/* Security / Help Desk Footer */}
-        <div
-          style={{
-            backgroundColor: '#f8fafc',
-            borderTop: '1px solid #edf1f5',
-            padding: '16px 24px',
-            textAlign: 'center',
-            fontSize: '12px',
-            color: '#67788e',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              color: '#253851',
-              fontWeight: 600,
-            }}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#183655"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-            Authorized Agent Access Only
-          </div>
-
-          <div>
-            Need assistance?{' '}
-            <span
-              onClick={() => addToast('Agent Support: support@memorialexpress.com | (800) 555-0199', 'info')}
-              style={{
-                color: '#183655',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Contact Agent Support
-            </span>
-          </div>
         </div>
       </div>
     </div>
