@@ -177,21 +177,33 @@ export default function QuoteSummary({ onBack }) {
 
   return (
     <div className="quote-summary-wrapper" style={{ paddingBottom: '30px' }}>
+      {/* MOBILE SCROLL HINT */}
+      <div className="fsa-mobile-scroll-hint">
+        <span className="scroll-hint-icon">⇄</span>
+        <span>
+          {isEs
+            ? 'Desliza horizontalmente para ver la cotización completa'
+            : 'Scroll horizontally to view full FSA statement'}
+        </span>
+      </div>
+
       {/* REPLICATED STATEMENT SHEET (EXACT UI FROM FIRST IMAGE) */}
-      <div
-        className="fsa-sheet"
-        style={{
-          background: '#ffffff',
-          border: '1.5px solid #000000',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-          maxWidth: '820px',
-          margin: '0 auto',
-          padding: '24px 28px',
-          fontFamily: 'Arial, Helvetica, sans-serif',
-          color: '#000000',
-          boxSizing: 'border-box',
-        }}
-      >
+      <div className="fsa-scroll-container">
+        <div
+          className="fsa-sheet"
+          style={{
+            background: '#ffffff',
+            border: '1.5px solid #000000',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+            maxWidth: '820px',
+            minWidth: '780px',
+            margin: '0 auto',
+            padding: '24px 28px',
+            fontFamily: 'Arial, Helvetica, sans-serif',
+            color: '#000000',
+            boxSizing: 'border-box',
+          }}
+        >
         {/* 1. DOCUMENT HEADER */}
         <div style={{ textAlign: 'center', marginBottom: '14px' }}>
           <h1
@@ -924,6 +936,7 @@ export default function QuoteSummary({ onBack }) {
             : 'Draft FSA: the package prices and individual service allocations must be reviewed against the approved funeral-home FSA before use.'}
         </div>
       </div>
+    </div>
 
       {/* 8. BOTTOM STEP ACTION BUTTONS */}
       <div

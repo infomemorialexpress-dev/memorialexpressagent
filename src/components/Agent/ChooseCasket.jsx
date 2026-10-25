@@ -54,9 +54,93 @@ export default function ChooseCasket({ onBack, onContinue }) {
     selectedCasket || quote.selectedCasketObject || null
   );
 
-  // Zoom modal state
+  // Zoom modal state with pan & directional navigation
   const [zoomModalCasket, setZoomModalCasket] = useState(null);
-  const [customZoom, setCustomZoom] = useState(1.2);
+  const [customZoom, setCustomZoom] = useState(1.4);
+  const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  const getMaxPan = (zoom) => {
+    if (zoom <= 1) return { maxX: 0, maxY: 0 };
+    const maxX = Math.max(0, (zoom - 1) * 220);
+    const maxY = Math.max(0, (zoom - 1) * 150);
+    return { maxX, maxY };
+  };
+
+  const handlePanStep = (dx, dy) => {
+    const { maxX, maxY } = getMaxPan(customZoom);
+    setPanPosition((prev) => ({
+      x: Math.max(-maxX, Math.min(maxX, prev.x + dx)),
+      y: Math.max(-maxY, Math.min(maxY, prev.y + dy)),
+    }));
+  };
+
+  const handleResetPan = () => {
+    setPanPosition({ x: 0, y: 0 });
+  };
+
+  const handleResetAll = () => {
+    setCustomZoom(1.0);
+    setPanPosition({ x: 0, y: 0 });
+  };
+
+  const handleMouseDown = (e) => {
+    if (customZoom <= 1) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - panPosition.x, y: e.clientY - panPosition.y });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging || customZoom <= 1) return;
+    const { maxX, maxY } = getMaxPan(customZoom);
+    const newX = e.clientX - dragStart.x;
+    const newY = e.clientY - dragStart.y;
+    setPanPosition({
+      x: Math.max(-maxX, Math.min(maxX, newX)),
+      y: Math.max(-maxY, Math.min(maxY, newY)),
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleTouchStart = (e) => {
+    if (customZoom <= 1 || !e.touches[0]) return;
+    setIsDragging(true);
+    setDragStart({
+      x: e.touches[0].clientX - panPosition.x,
+      y: e.touches[0].clientY - panPosition.y,
+    });
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging || customZoom <= 1 || !e.touches[0]) return;
+    const { maxX, maxY } = getMaxPan(customZoom);
+    const newX = e.touches[0].clientX - dragStart.x;
+    const newY = e.touches[0].clientY - dragStart.y;
+    setPanPosition({
+      x: Math.max(-maxX, Math.min(maxX, newX)),
+      y: Math.max(-maxY, Math.min(maxY, newY)),
+    });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  const handleWheel = (e) => {
+    if (e.deltaY < 0) {
+      setCustomZoom((prev) => Math.min(2.5, +(prev + 0.15).toFixed(1)));
+    } else {
+      setCustomZoom((prev) => {
+        const next = Math.max(0.8, +(prev - 0.15).toFixed(1));
+        if (next <= 1) setPanPosition({ x: 0, y: 0 });
+        return next;
+      });
+    }
+  };
 
   // Hover states for card image zoom
   const [hoveredCardId, setHoveredCardId] = useState(null);
@@ -495,7 +579,9 @@ export default function ChooseCasket({ onBack, onContinue }) {
                     onClick={(e) => {
                       e.stopPropagation();
                       setZoomModalCasket(casket);
-                      setCustomZoom(1.2);
+                      setCustomZoom(1.4);
+                      setPanPosition({ x: 0, y: 0 });
+                      setIsDragging(false);
                     }}
                     style={{
                       width: '100%',
@@ -645,53 +731,304 @@ export default function ChooseCasket({ onBack, onContinue }) {
               </button>
             </div>
 
-            {/* Enlarged Casket Image Area */}
+            {/* Enlarged Casket Image Area with Interactive Pan & Directional Navigation */}
             <div
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onWheel={handleWheel}
               style={{
-                height: '320px',
+                position: 'relative',
+                height: '330px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 backgroundColor: '#ffffff',
                 border: '1.5px solid #e2e8f0',
                 borderRadius: '12px',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                cursor: customZoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                userSelect: 'none',
               }}
             >
               <img
                 src={zoomModalCasket.imageUrl || zoomModalCasket.image}
                 alt={zoomModalCasket.name}
+                draggable={false}
                 style={{
-                  transform: `scale(${customZoom})`,
-                  transition: 'transform 0.15s ease',
+                  transform: `translate(${panPosition.x}px, ${panPosition.y}px) scale(${customZoom})`,
+                  transition: isDragging ? 'none' : 'transform 0.16s ease-out',
                   maxHeight: '100%',
                   maxWidth: '100%',
-                  objectFit: 'contain'
+                  objectFit: 'contain',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
                 }}
               />
+
+              {/* Exploration Hint Overlay (Shows only when zoomed in) */}
+              {customZoom > 1 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '12px',
+                    left: '12px',
+                    backgroundColor: 'rgba(24, 54, 85, 0.85)',
+                    color: '#ffffff',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '4px 10px',
+                    borderRadius: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backdropFilter: 'blur(4px)',
+                    pointerEvents: 'none',
+                    zIndex: 5,
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                  }}
+                >
+                  <span style={{ fontSize: '13px' }}>✥</span>
+                  <span>
+                    {lang === 'es'
+                      ? 'Arrastra o usa las flechas para explorar'
+                      : 'Drag image or use arrows to explore'}
+                  </span>
+                </div>
+              )}
+
+              {/* Directional Arrow Navigation Pad (Visible only when customZoom > 1) */}
+              {customZoom > 1 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    bottom: '12px',
+                    backgroundColor: 'rgba(24, 54, 85, 0.90)',
+                    backdropFilter: 'blur(6px)',
+                    padding: '6px',
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 30px)',
+                    gridTemplateRows: 'repeat(3, 30px)',
+                    gap: '3px',
+                    zIndex: 10,
+                  }}
+                >
+                  <div />
+                  {/* UP ARROW */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePanStep(0, 45);
+                    }}
+                    title={lang === 'es' ? 'Mover hacia arriba' : 'Pan Up'}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: '#ffffff',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 0,
+                    }}
+                  >
+                    ▲
+                  </button>
+                  <div />
+
+                  {/* LEFT ARROW */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePanStep(45, 0);
+                    }}
+                    title={lang === 'es' ? 'Mover a la izquierda' : 'Pan Left'}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: '#ffffff',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 0,
+                    }}
+                  >
+                    ◀
+                  </button>
+
+                  {/* CENTER RE-CENTER BUTTON */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleResetPan();
+                    }}
+                    title={lang === 'es' ? 'Centrar imagen' : 'Center Image'}
+                    style={{
+                      background: 'rgba(212, 175, 55, 0.35)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: '#ffd700',
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 0,
+                    }}
+                  >
+                    •
+                  </button>
+
+                  {/* RIGHT ARROW */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePanStep(-45, 0);
+                    }}
+                    title={lang === 'es' ? 'Mover a la derecha' : 'Pan Right'}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: '#ffffff',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 0,
+                    }}
+                  >
+                    ▶
+                  </button>
+
+                  <div />
+                  {/* DOWN ARROW */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePanStep(0, -45);
+                    }}
+                    title={lang === 'es' ? 'Mover hacia abajo' : 'Pan Down'}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: '#ffffff',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 0,
+                    }}
+                  >
+                    ▼
+                  </button>
+                  <div />
+                </div>
+              )}
             </div>
 
-            {/* Zoom Slider Control */}
+            {/* Zoom Slider Control with Step Buttons & Reset */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '14px',
+                gap: '10px',
                 marginTop: '18px'
               }}
             >
               <span style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>
                 Zoom:
               </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomZoom((prev) => {
+                    const next = Math.max(0.8, +(prev - 0.2).toFixed(1));
+                    if (next <= 1) setPanPosition({ x: 0, y: 0 });
+                    return next;
+                  });
+                }}
+                style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#f8fafc',
+                  color: '#183655',
+                  fontSize: '15px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                }}
+                title="Zoom Out"
+              >
+                −
+              </button>
+
               <input
                 type="range"
                 min="0.8"
                 max="2.5"
                 step="0.1"
                 value={customZoom}
-                onChange={(e) => setCustomZoom(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setCustomZoom(val);
+                  if (val <= 1) setPanPosition({ x: 0, y: 0 });
+                }}
                 style={{ flex: 1, accentColor: '#183655', cursor: 'pointer' }}
               />
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomZoom((prev) => Math.min(2.5, +(prev + 0.2).toFixed(1)));
+                }}
+                style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#f8fafc',
+                  color: '#183655',
+                  fontSize: '15px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                }}
+                title="Zoom In"
+              >
+                +
+              </button>
+
               <span
                 style={{
                   fontSize: '13px',
@@ -703,6 +1040,30 @@ export default function ChooseCasket({ onBack, onContinue }) {
               >
                 {Math.round(customZoom * 100)}%
               </span>
+
+              {(customZoom !== 1 || panPosition.x !== 0 || panPosition.y !== 0) && (
+                <button
+                  type="button"
+                  onClick={handleResetAll}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    backgroundColor: '#f1f5f9',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    color: '#334155',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title={lang === 'es' ? 'Restablecer zoom y posición' : 'Reset zoom and position'}
+                >
+                  ⟲ {lang === 'es' ? 'Reiniciar' : 'Reset'}
+                </button>
+              )}
             </div>
 
             {/* Specifications Description */}
