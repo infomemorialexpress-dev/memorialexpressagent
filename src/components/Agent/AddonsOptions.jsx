@@ -230,9 +230,10 @@ export default function AddonsOptions({ onBack, onContinue }) {
   };
 
   const handlePriceChange = (addonId, val) => {
+    const sanitizedVal = val === '' ? '' : Math.max(0, parseFloat(val) || 0);
     setCustomPrices(prev => ({
       ...prev,
-      [addonId]: val
+      [addonId]: sanitizedVal
     }));
   };
 
@@ -492,6 +493,12 @@ export default function AddonsOptions({ onBack, onContinue }) {
                 min="0"
                 step="1"
                 value={currentPrice}
+                onWheel={(e) => e.target.blur()}
+                onKeyDown={(e) => {
+                  if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                    e.preventDefault();
+                  }
+                }}
                 onChange={(e) => handlePriceChange(addon.id, e.target.value)}
                 style={{
                   width: '105px',
@@ -792,6 +799,12 @@ export default function AddonsOptions({ onBack, onContinue }) {
                   step="1"
                   readOnly={Boolean(addon.isFixedPrice)}
                   value={customPrices[addon.id] !== undefined ? customPrices[addon.id] : unitPrice}
+                  onWheel={(e) => e.target.blur()}
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                      e.preventDefault();
+                    }
+                  }}
                   onChange={(e) => handlePriceChange(addon.id, e.target.value)}
                   style={{
                     width: '78px',
@@ -839,6 +852,12 @@ export default function AddonsOptions({ onBack, onContinue }) {
                 step="1"
                 readOnly={Boolean(addon.isFixedPrice)}
                 value={customPrices[addon.id] !== undefined ? customPrices[addon.id] : unitPrice}
+                onWheel={(e) => e.target.blur()}
+                onKeyDown={(e) => {
+                  if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                    e.preventDefault();
+                  }
+                }}
                 onChange={(e) => handlePriceChange(addon.id, e.target.value)}
                 style={{
                   width: '78px',

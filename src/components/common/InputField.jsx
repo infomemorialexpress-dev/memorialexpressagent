@@ -19,6 +19,36 @@ export default function InputField({
   autoFocus = false,
   style = {}
 }) {
+  const isNumber = type === 'number';
+  const effectiveMin = min !== undefined ? min : (isNumber ? '0' : undefined);
+
+  const handleKeyDown = (e) => {
+    if (isNumber) {
+      // Prevent entering negative sign or exponential notation
+      if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+      }
+    }
+  };
+
+  const handleWheel = (e) => {
+    if (isNumber) {
+      e.target.blur();
+    }
+  };
+
+  const handleChange = (e) => {
+    if (isNumber && onChange) {
+      const rawVal = e.target.value;
+      if (rawVal !== '' && Number(rawVal) < 0) {
+        e.target.value = '0';
+      }
+    }
+    if (onChange) {
+      onChange(e);
+    }
+  };
+
   return (
     <div className={`form-group ${className}`} style={style}>
       {label && (
@@ -31,10 +61,12 @@ export default function InputField({
         name={name}
         type={type}
         value={value}
-        onChange={onChange}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onWheel={handleWheel}
         placeholder={placeholder}
         disabled={disabled}
-        min={min}
+        min={effectiveMin}
         max={max}
         step={step}
         autoFocus={autoFocus}

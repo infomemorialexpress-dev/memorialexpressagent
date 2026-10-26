@@ -241,8 +241,9 @@ export default function ChooseCasket({ onBack, onContinue }) {
   const handlePriceChange = (casket, val) => {
     if (casket.isFixedPrice) return;
     const casketKey = casket._id || casket.id || casket.productCode || casket.name;
-    setCustomPrices(prev => ({ ...prev, [casketKey]: val }));
-    const numVal = Math.max(0, Number(val) || 0);
+    const cleanVal = val === '' ? '' : Math.max(0, Number(val) || 0);
+    setCustomPrices(prev => ({ ...prev, [casketKey]: cleanVal }));
+    const numVal = Math.max(0, Number(cleanVal) || 0);
     updatePriceOverride(casketKey, numVal);
     const updated = { ...casket, price: numVal, listPrice: numVal };
     setLocalSelectedCasket(updated);
@@ -613,6 +614,12 @@ export default function ChooseCasket({ onBack, onContinue }) {
                             step="1"
                             readOnly={Boolean(casket.isFixedPrice)}
                             value={customPrices[casketKey] !== undefined ? customPrices[casketKey] : currentPrice}
+                            onWheel={(e) => e.target.blur()}
+                            onKeyDown={(e) => {
+                              if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                                e.preventDefault();
+                              }
+                            }}
                             onChange={(e) => handlePriceChange(casket, e.target.value)}
                             style={{
                               width: '100%',
