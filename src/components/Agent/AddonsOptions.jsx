@@ -93,7 +93,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
                 if (nameLower.includes('death certificate')) return false;
                 const price = item.listPrice !== null && item.listPrice !== undefined ? Number(item.listPrice) : Number(item.price);
                 const hasDests = Boolean(item.hasDestinations && Array.isArray(item.destinations) && item.destinations.length > 0);
-                return (price > 0 || hasDests) && item.isActive !== false;
+                return (price >= 0 || hasDests) && item.isActive !== false;
               })
               .map(item => ({
                 id: item._id || item.id,
