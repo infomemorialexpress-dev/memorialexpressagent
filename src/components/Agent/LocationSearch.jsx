@@ -83,61 +83,40 @@ export default function LocationSearch({ onContinue }) {
     quote,
     selectHome,
     selectedFuneralHome,
-    funeralHomes: contextHomes,
+    funeralHomes,
+    isLoadingHomes,
+    fetchFuneralHomes,
     db,
+    dbError,
     addToast
   } = useQuote();
 
   const [searchFilter, setSearchFilter] = useState('City');
   const [searchQuery, setSearchQuery] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
-  const [allHomes, setAllHomes] = useState(() => {
-    if (contextHomes && contextHomes.length > 0) return contextHomes;
-    if (db?.homes && db.homes.length > 0) return db.homes;
-    return [];
-  });
-  const [isLoading, setIsLoading] = useState(false);
-  const [loadError, setLoadError] = useState(null);
   const [localSelectedId, setLocalSelectedId] = useState(
     selectedFuneralHome?._id || selectedFuneralHome?.id || quote.home || ''
   );
 
-  // Fetch live funeral homes strictly from backend API
+  const allHomes = useMemo(() => {
+    if (Array.isArray(funeralHomes) && funeralHomes.length > 0) return funeralHomes;
+    if (Array.isArray(db?.homes) && db.homes.length > 0) return db.homes;
+    return [];
+  }, [funeralHomes, db?.homes]);
+
+  // Keep local selection in sync with quote.home
   useEffect(() => {
-    let isMounted = true;
-    async function loadHomes() {
-      setIsLoading(true);
-      setLoadError(null);
-      try {
-        const res = await api.get('/funeral-homes');
-        if (isMounted && res.data && Array.isArray(res.data) && res.data.length > 0) {
-          setAllHomes(res.data);
-        } else if (isMounted && db?.homes?.length > 0) {
-          setAllHomes(db.homes);
-        } else if (isMounted) {
-          setAllHomes([]);
-        }
-      } catch (err) {
-        console.error('[LocationSearch] Failed to fetch /funeral-homes:', err);
-        if (isMounted) {
-          setAllHomes([]);
-          setLoadError(err.userMessage || 'Could not connect to database to load funeral homes.');
-        }
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
+    if (quote.home) {
+      setLocalSelectedId(quote.home);
     }
+  }, [quote.home]);
 
-    if (!contextHomes || contextHomes.length === 0) {
-      loadHomes();
-    } else {
-      setAllHomes(contextHomes);
+  // If funeral homes are empty, fetch from QuoteContext
+  useEffect(() => {
+    if (!funeralHomes || funeralHomes.length === 0) {
+      fetchFuneralHomes?.();
     }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [contextHomes]);
+  }, [funeralHomes, fetchFuneralHomes]);
 
   // Keep local selection in sync with quote.home
   useEffect(() => {
@@ -325,7 +304,7 @@ export default function LocationSearch({ onContinue }) {
       </form>
 
       {/* Loading Skeleton State when directory is loading */}
-      {isLoading && allHomes.length === 0 && (
+      {isLoadingHomes && allHomes.length === 0 && (
         <div style={{ marginBottom: '32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', color: '#183655', fontWeight: 650, fontSize: '13.5px' }}>
             <div className="app-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
@@ -335,8 +314,8 @@ export default function LocationSearch({ onContinue }) {
         </div>
       )}
 
-      {/* Non-blocking Background Syncing Notice */}
-      {isLoading && allHomes.length > 0 && (
+      {/* Non-blocking Background Syncing Notice (only active when background sync is actually running) */}
+      {isLoadingHomes && allHomes.length > 0 && (
         <div
           style={{
             display: 'inline-flex',
