@@ -1,5 +1,4 @@
-// Base API Client and Read-only Persistence for MemorialExpress Agent Portal
-import { LEGACY_DATA } from '../../utils/legacyData.js';
+// Base API Client and Shared Utilities for MemorialExpress Agent Portal
 
 export const STORAGE_KEY = 'legacy_simple_v5';
 
@@ -22,18 +21,17 @@ export function formatErrorMessage(error) {
 export function getStoredDb() {
   try {
     if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(STORAGE_KEY) ||
-        localStorage.getItem('legacy_simple_v4') ||
-        localStorage.getItem('legacy_simple_v3');
+      const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.homes) && parsed.homes.length > 0 && parsed.packages) {
+        if (parsed && Array.isArray(parsed.homes)) {
           return parsed;
         }
       }
     }
   } catch (err) {
-    console.warn('[Agent apiClient] Failed to parse localStorage db, fallback to initial DB', err);
+    console.warn('[Agent apiClient] Failed to parse localStorage db:', err);
   }
-  return JSON.parse(JSON.stringify(LEGACY_DATA.initialDb));
+  return { homes: [], caskets: [], addons: [], packages: {}, fees: {} };
 }
+

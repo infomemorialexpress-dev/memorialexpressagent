@@ -1,9 +1,11 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import ShimmerImage from '../common/ShimmerImage.jsx';
 
 export default function ConfirmHome({ onBack, onContinue }) {
+  const { t } = useTranslation();
   const { lang, selectedFuneralHome, quote, calculation } = useQuote();
 
   const home = selectedFuneralHome || calculation?.homeObj || quote?.selectedHomeObj || null;
@@ -11,9 +13,9 @@ export default function ConfirmHome({ onBack, onContinue }) {
   if (!home) {
     return (
       <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
-        <p>No funeral home selected. Please return to Step 1.</p>
+        <p>{lang === 'es' ? 'No se ha seleccionado una funeraria. Regrese al Paso 1.' : 'No funeral home selected. Please return to Step 1.'}</p>
         <Button variant="secondary" onClick={onBack}>
-          ← Back to Search
+          ← {t('common.back', 'Back to Search')}
         </Button>
       </div>
     );
@@ -182,7 +184,7 @@ export default function ConfirmHome({ onBack, onContinue }) {
                 lineHeight: 1.1,
               }}
             >
-              {locationsCount} {locationsCount === 1 ? 'location' : 'locations'}
+              {locationsCount} {lang === 'es' ? (locationsCount === 1 ? 'ubicación' : 'ubicaciones') : (locationsCount === 1 ? 'location' : 'locations')}
             </div>
           </div>
 
@@ -234,7 +236,7 @@ export default function ConfirmHome({ onBack, onContinue }) {
                 marginBottom: '10px',
               }}
             >
-              Associated Chapels & Service Branches:
+              {lang === 'es' ? 'Sucursales y Capillas Asociadas:' : 'Associated Chapels & Service Branches:'}
             </div>
             <div
               style={{
@@ -298,7 +300,7 @@ export default function ConfirmHome({ onBack, onContinue }) {
             color: '#253851',
           }}
         >
-          ← Back
+          ← {t('common.back', 'Back')}
         </Button>
 
         <Button
@@ -314,7 +316,7 @@ export default function ConfirmHome({ onBack, onContinue }) {
             borderRadius: '10px',
           }}
         >
-          Continue →
+          {t('common.continue', 'Continue →')}
         </Button>
       </div>
     </div>

@@ -1,5 +1,18 @@
 import { jsPDF } from 'jspdf';
-import { formatMoney } from './quoteLogic.js';
+import { formatMoney, getItemizedServicesList, t } from './quoteLogic.js';
+
+function getTranslatedServiceTitle(title, isEs) {
+  if (!isEs) return title;
+  const lower = String(title || '').toLowerCase();
+  if (lower.includes('two-day') || lower.includes('two day')) return 'SERVICIO FUNERARIO DE DOS DÍAS';
+  if (lower.includes('one-day') || lower.includes('one day')) return 'SERVICIO FUNERARIO DE UN DÍA';
+  if (lower.includes('traditional cremation')) return 'CREMACIÓN TRADICIONAL';
+  if (lower.includes('memorial cremation')) return 'CREMACIÓN CON SERVICIO MEMORIAL';
+  if (lower.includes('direct cremation')) return 'CREMACIÓN DIRECTA';
+  if (lower.includes('ship out with') || lower.includes('ship-out with')) return 'TRASLADO / ENVÍO CON SERVICIO';
+  if (lower.includes('direct ship')) return 'TRASLADO / ENVÍO DIRECTO';
+  return t(title, 'es');
+}
 
 export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const doc = new jsPDF({
@@ -26,24 +39,14 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const tanText = [120, 53, 15]; // #78350f
   const borderLight = [203, 213, 225];
 
-  // ================= 1. STATIC (HARDCODED) ELEMENTS =================
-  const selectedServiceS1 = Number(calculation?.packageData?.section1 || quote?.selectedServiceObject?.section1Price || 0);
-  const effectiveServicesTotal = selectedServiceS1 > 0 ? selectedServiceS1 : 3395.0;
-  const packageSavingsAmount = Math.round((effectiveServicesTotal - 4395.0) * 100) / 100;
-
-  const STATIC_SECTION_1_SERVICES = [
-    { desc: isEs ? 'Arreglos y personal profesional' : 'Arrangements and professional staff', amount: 2050.0 },
-    { desc: isEs ? 'Traslado (25 millas)' : 'Transfer (25 miles)', amount: 695.0 },
-    { desc: isEs ? 'Embalsamamiento / refrigeración' : 'Embalming / refrigeration', amount: 525.0 },
-    { desc: isEs ? 'Otra preparación' : 'Other preparation', amount: 200.0 },
-    { desc: isEs ? 'Velación (3 horas)' : 'Visitation (3 hours)', amount: 300.0 },
-    { desc: isEs ? 'Servicio funerario / memorial' : 'Funeral/memorial service', amount: 150.0 },
-    { desc: isEs ? 'Carroza funeraria' : 'Funeral coach', amount: 375.0 },
-    { desc: isEs ? 'Vehículos utilitarios / otros' : 'Utility vehicles / other', amount: 100.0 },
-    { desc: isEs ? 'Ahorro de paquete' : 'Package savings', amount: packageSavingsAmount },
-  ];
-
-  const STATIC_SERVICES_TOTAL = effectiveServicesTotal;
+  // ================= 1. DYNAMIC SECTION I SERVICES =================
+  const itemizedBreakdown = getItemizedServicesList(
+    quote?.selectedServiceObject || calculation?.serviceObj,
+    calculation,
+    isEs
+  );
+  const dynamicItemizedServices = itemizedBreakdown.rows;
+  const effectiveServicesTotal = itemizedBreakdown.totalServices;
   const STATIC_DISPOSITION_PERMIT_FEE = 12.0;
   const STATIC_DEATH_CERT_UNIT_PRICE = (quote?.deathCertUnitPrice && quote.deathCertUnitPrice !== 26 && quote.deathCertUnitPrice !== 24)
     ? Number(quote.deathCertUnitPrice)
@@ -53,7 +56,8 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   // ================= 2. DYNAMIC (CONTEXT-BASED) ELEMENTS =================
   const homeObj = calculation?.homeObj || quote?.selectedHomeObj || {};
   const serviceKey = quote?.service || 'one_day';
-  const serviceTitle = (quote?.serviceName || calculation?.serviceTitle || 'ONE-DAY FUNERAL').toUpperCase();
+  const rawServiceTitle = (quote?.serviceName || calculation?.serviceTitle || 'ONE-DAY FUNERAL').toUpperCase();
+  const serviceTitle = getTranslatedServiceTitle(rawServiceTitle, isEs);
 
   const isCremation = serviceKey.includes('cremation');
   const isShip = serviceKey.includes('ship');
@@ -63,29 +67,60 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const dynamicCasketPrice = Number(casket.price || casket.listPrice || calculation?.s2 || 1690.0);
   const dynamicCasketName = casket.name || 'Gemini Silver';
   const dynamicManufacturer = casket.manufacturer || 'Optima catalog';
-  const dynamicInterior = casket.interiorExterior || casket.interior || 'crepe ivory interior';
+  const dynamicInterior = isEs ? t(casket.interiorExterior || casket.interior || 'crepe ivory interior', 'es') : (casket.interiorExterior || casket.interior || 'crepe ivory interior');
   const dynamicExterior = casket.exterior || casket.color || '—';
-  const dynamicConstruction = casket.material || casket.construction || '20-gauge steel';
+  const dynamicConstruction = isEs ? t(casket.material || casket.construction || '20-gauge steel', 'es') : (casket.material || casket.construction || '20-gauge steel');
   const dynamicModel = casket.model || casket.modelNumber || '—';
 
-  const dynamicTotalMerchandise = dynamicCasketPrice;
+  // Guaranteed Add-ons from Step 5 (e.g., Memorial package)
+  const isGuaranteedItem = (a) => {
+    if (!a) return false;
+    const id = String(a.id || '').toLowerCase();
+    const name = String(a.name || '').toLowerCase();
+    return !!a.isGuaranteed || id === 'memorial' || name.includes('memorial package');
+  };
+
+  const guaranteedAddons = Array.isArray(calculation?.guaranteedAddons) && calculation.guaranteedAddons.length > 0
+    ? calculation.guaranteedAddons
+    : (Array.isArray(quote?.guaranteedAddons) && quote.guaranteedAddons.length > 0
+        ? quote.guaranteedAddons
+        : (Array.isArray(quote?.selectedAddonObjects)
+            ? quote.selectedAddonObjects.filter(isGuaranteedItem)
+            : (quote?.addons?.includes('memorial')
+                ? [{ id: 'memorial', name: 'Memorial package — guest book, memorial cards & video', price: 395, unitPrice: 395, quantity: 1, totalPrice: 395, isGuaranteed: true }]
+                : [])));
+
+  const guaranteedAddonsTotal = Number(calculation?.guaranteedAddonsTotal) || guaranteedAddons.reduce(
+    (sum, a) => sum + Number(a.totalPrice ?? a.price ?? 0),
+    0
+  );
+
+  // 11% tax on guaranteed merchandise
+  const guaranteedAddonsTax = Number(calculation?.guaranteedAddonsTax) || Math.round(guaranteedAddonsTotal * 0.11 * 100) / 100;
+
+  // Add base price of selected guaranteedAddons to Section 2 TOTAL MERCHANDISE and TOTAL GUARANTEED FUNERAL PRICE
+  const dynamicTotalMerchandise = dynamicCasketPrice + guaranteedAddonsTotal;
   const dynamicTotalGuaranteed = effectiveServicesTotal + dynamicTotalMerchandise;
 
   // Dynamic Non-guaranteed calculations
   const dynamicCertsCount = Math.max(1, Number(calculation?.certsCount || quote?.certs || quote?.deathCertCount || 1));
   const dynamicCertsTotal = dynamicCertsCount * STATIC_DEATH_CERT_UNIT_PRICE;
 
-  const dynamicSalesTax = Math.round(dynamicCasketPrice * STATIC_SALES_TAX_RATE * 100) / 100;
+  // Casket sales tax + 11% guaranteed merchandise tax added to Sales tax
+  const casketSalesTax = Math.round(dynamicCasketPrice * STATIC_SALES_TAX_RATE * 100) / 100;
+  const dynamicSalesTax = Math.round((casketSalesTax + guaranteedAddonsTax) * 100) / 100;
   const dynamicDispositionPermit = STATIC_DISPOSITION_PERMIT_FEE;
 
-  const dynamicSelectedAddons = (Array.isArray(calculation?.addedAddons) ? calculation.addedAddons : [])
+  // Dynamic Selected Non-Guaranteed Add-ons (Flowers, etc. - excluding guaranteed items)
+  const dynamicSelectedAddons = (Array.isArray(calculation?.addedAddons) ? calculation.addedAddons : (quote?.nonGuaranteedAddons || quote?.selectedAddonObjects || []))
     .filter(addon => {
       const aPrice = typeof addon === 'object' && addon.price !== undefined ? Number(addon.price) : 0;
       const aName = typeof addon === 'string' ? addon : (addon.name || '');
       const aId = typeof addon === 'object' && addon.id ? String(addon.id) : '';
-      if (aPrice <= 0) return false;
+      if (aPrice <= 0 && aId !== 'music') return false;
       if (aName.startsWith('western_') || aName.startsWith('felipe_')) return false;
       if (aId.startsWith('western_') || aId.startsWith('felipe_')) return false;
+      if (isGuaranteedItem(addon)) return false;
       return true;
     });
 
@@ -201,14 +236,14 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   doc.line(leftTablePriceX, leftY, leftTablePriceX, startGridY + colHeight - 32);
 
   const rowHeight = 16.5;
-  STATIC_SECTION_1_SERVICES.forEach((row) => {
+  dynamicItemizedServices.forEach((row) => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.8);
     doc.setTextColor(...black);
     doc.text(row.desc, margin + 4, leftY + 11, { maxWidth: colWidth - priceColW - 8 });
 
     doc.setFont('helvetica', 'bold');
-    if (row.amount < 0) {
+    if (row.isSavings || row.amount < 0) {
       doc.setTextColor(185, 28, 28);
       doc.text(`-${formatMoney(Math.abs(row.amount))}`, margin + colWidth - 4, leftY + 11, { align: 'right' });
     } else {
@@ -222,7 +257,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
     leftY += rowHeight;
   });
 
-  // Section I Total at bottom of left column (Static $3,395.00)
+  // Section I Total at bottom of left column
   const leftBottomY = startGridY + colHeight - 32;
   doc.setDrawColor(...black);
   doc.setLineWidth(1);
@@ -232,7 +267,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.text(isEs ? 'TOTAL SERVICIOS' : 'TOTAL SERVICES', margin + 4, leftBottomY + 11);
-  doc.text(formatMoney(STATIC_SERVICES_TOTAL), margin + colWidth - 4, leftBottomY + 11, { align: 'right' });
+  doc.text(formatMoney(effectiveServicesTotal), margin + colWidth - 4, leftBottomY + 11, { align: 'right' });
 
   // ---------- RIGHT COLUMN: SECTION II — MERCHANDISE (DYNAMIC) ----------
   let rightX = margin + colWidth;
@@ -299,6 +334,21 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const rightTablePriceX = rightX + colWidth - priceColW;
   doc.line(rightTablePriceX, rightY, rightTablePriceX, startGridY + colHeight - 32);
 
+  const guaranteedMerchRows = guaranteedAddons.length > 0
+    ? guaranteedAddons.map(item => {
+        const translatedName = isEs ? t(item.name, 'es') : item.name;
+        return {
+          label: item.quantity > 1 ? `${translatedName} (${item.quantity} × ${formatMoney(item.unitPrice)})` : translatedName,
+          val: formatMoney(item.totalPrice ?? item.price),
+          isBoldVal: true,
+        };
+      })
+    : [{
+        label: isEs ? 'No se seleccionó mercancía garantizada adicional' : 'No additional guaranteed merchandise selected',
+        val: '',
+        isItalic: true,
+      }];
+
   const merchRows = [
     { label: isEs ? 'Ataúd' : 'Casket', val: formatMoney(dynamicCasketPrice), isBold: true },
     { label: isEs ? 'Fabricante' : 'Manufacturer', val: dynamicManufacturer },
@@ -313,11 +363,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
     { label: isEs ? 'Construcción' : 'Construction', val: '' },
     { label: isEs ? 'Número de modelo' : 'Model number', val: '' },
     { label: isEs ? 'Mercancía Garantizada' : 'Guaranteed Merchandise', val: '', isHeader: true },
-    {
-      label: isEs ? 'No se seleccionó mercancía garantizada adicional' : 'No additional guaranteed merchandise selected',
-      val: '',
-      isItalic: true,
-    },
+    ...guaranteedMerchRows,
   ];
 
   const mRowH = 14;
@@ -418,7 +464,8 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   // Map any other add-ons from active QuoteContext
   if (dynamicSelectedAddons.length > 0) {
     const firstAddon = dynamicSelectedAddons[0];
-    const aName = typeof firstAddon === 'string' ? firstAddon : (firstAddon.name || 'Add-on Item');
+    const rawAddonName = typeof firstAddon === 'string' ? firstAddon : (firstAddon.name || 'Add-on Item');
+    const aName = isEs ? t(rawAddonName, 'es') : rawAddonName;
     const aPrice = typeof firstAddon === 'object' && firstAddon.price !== undefined ? Number(firstAddon.price) : 0;
     doc.line(margin, nonGInnerY + 16, margin + nonGColW, nonGInnerY + 16);
     doc.setFont('helvetica', 'normal');
@@ -433,7 +480,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
-  doc.text(isEs ? 'Impuesto sobre Ventas (9.5%)' : 'Sales Tax (9.5%)', rightNonGX + 4, nonGInnerY + 11);
+  doc.text(isEs ? 'Impuesto sobre Ventas' : 'Sales Tax', rightNonGX + 4, nonGInnerY + 11);
   doc.setFont('helvetica', 'bold');
   doc.text(formatMoney(dynamicSalesTax), margin + contentWidth - 4, nonGInnerY + 11, { align: 'right' });
 

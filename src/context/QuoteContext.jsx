@@ -1,9 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { fetchAgentQuoteDb } from '../services/agent/agentService.js';
-import { getStoredDb } from '../services/base/apiClient.js';
 import { calculateQuote, isCremation } from '../utils/quoteLogic.js';
-import { LEGACY_DATA } from '../utils/legacyData.js';
 import api from '../services/api.js';
+import i18n from '../i18n.js';
 
 const QuoteContext = createContext(null);
 
@@ -11,29 +10,17 @@ export function QuoteProvider({ children }) {
   // Language State
   const [lang, setLang] = useState(() => localStorage.getItem('memorial_lang') || 'en');
 
-  // Real Funeral Homes from Backend API (Optimistic fallback loaded immediately)
-  const [funeralHomes, setFuneralHomes] = useState(() => {
-    try {
-      const stored = getStoredDb();
-      if (stored?.homes?.length > 0) return stored.homes;
-    } catch {}
-    return LEGACY_DATA?.initialDb?.homes || [];
-  });
-  const [isLoadingHomes, setIsLoadingHomes] = useState(false);
+  // Real Funeral Homes from Backend API
+  const [funeralHomes, setFuneralHomes] = useState([]);
+  const [isLoadingHomes, setIsLoadingHomes] = useState(true);
   const [selectedFuneralHome, setSelectedFuneralHome] = useState(null);
 
-  // Read-only catalog snapshot for the agent quoter
-  const [db, setDb] = useState(() => {
-    try {
-      return getStoredDb();
-    } catch {
-      return { homes: [], caskets: [], addons: [], packages: {}, fees: {} };
-    }
-  });
-  const [isLoadingDb, setIsLoadingDb] = useState(false);
+  // Live database catalog strictly from MongoDB
+  const [db, setDb] = useState({ homes: [], caskets: [], addons: [], packages: {}, fees: {} });
+  const [isLoadingDb, setIsLoadingDb] = useState(true);
   const [dbError, setDbError] = useState(null);
 
-  // Funnel Step State (0 = Location/Home, 1 = Home Confirm, 2 = Service, 3 = Merchandise, 4 = Addons, 5 = Summary)
+  // Funnel Step State (0 = Location/Home, 1 = Home Confirm, 2 = Service, 3 = Merchandise, 4 = Addons, 5 = Summary, 6 = Legal)
   const [step, setStep] = useState(0);
 
   // Quote State
@@ -47,6 +34,10 @@ export function QuoteProvider({ children }) {
     service: '',
     casket: '',
     addons: [],
+    guaranteedAddons: [],
+    nonGuaranteedAddons: [],
+    guaranteedAddonsTotal: 0,
+    guaranteedAddonsTax: 0,
     certs: 1,
     urnAllowance: '',
     airfarePrice: 1000,
@@ -77,39 +68,31 @@ export function QuoteProvider({ children }) {
   // Fetch real funeral homes from Backend API
   const fetchFuneralHomes = useCallback(async () => {
     setIsLoadingHomes(true);
+    setDbError(null);
     try {
       const response = await api.get('/funeral-homes');
       const homes = Array.isArray(response.data) ? response.data : [];
-      if (homes.length > 0) {
-        setFuneralHomes(homes);
-        setDb(prev => ({
-          ...prev,
-          homes: homes
-        }));
-        return homes;
-      }
-      throw new Error('No funeral homes returned by backend');
+      setFuneralHomes(homes);
+      setDb(prev => ({
+        ...prev,
+        homes
+      }));
+      return homes;
     } catch (err) {
-      console.warn('[QuoteContext] Could not fetch /funeral-homes from backend, using fallback snapshot:', err);
-      const fallback = (db.homes && db.homes.length > 0) ? db.homes : (LEGACY_DATA?.initialDb?.homes || []);
-      if (fallback.length > 0) {
-        setFuneralHomes(fallback);
-        setDb(prev => ({
-          ...prev,
-          homes: fallback
-        }));
-      }
-      return fallback;
+      console.error('[QuoteContext] Could not fetch /funeral-homes from backend:', err);
+      setFuneralHomes([]);
+      setDbError(err.userMessage || 'Could not connect to database to load funeral homes.');
+      return [];
     } finally {
       setIsLoadingHomes(false);
     }
-  }, [db.homes]);
+  }, []);
 
   useEffect(() => {
     fetchFuneralHomes();
   }, [fetchFuneralHomes]);
 
-  // Fetch catalog snapshot
+  // Fetch live catalog snapshot
   const loadAgentCatalog = useCallback(async () => {
     setIsLoadingDb(true);
     setDbError(null);
@@ -118,16 +101,16 @@ export function QuoteProvider({ children }) {
       if (res.success && res.db) {
         setDb(prev => ({
           ...res.db,
-          homes: (prev.homes && prev.homes.length > 0) ? prev.homes : (funeralHomes.length > 0 ? funeralHomes : res.db.homes)
+          homes: prev.homes.length > 0 ? prev.homes : res.db.homes
         }));
       }
     } catch (err) {
       console.error('[QuoteContext] Failed to load agent catalog:', err);
-      setDbError(err.message || 'Failed to load catalog');
+      setDbError(err.message || 'Failed to load catalog from database');
     } finally {
       setIsLoadingDb(false);
     }
-  }, [funeralHomes]);
+  }, []);
 
   useEffect(() => {
     loadAgentCatalog();
@@ -137,7 +120,18 @@ export function QuoteProvider({ children }) {
     setLang(newLang);
     localStorage.setItem('memorial_lang', newLang);
     document.documentElement.lang = newLang;
+    try {
+      i18n.changeLanguage(newLang);
+    } catch (e) {
+      console.warn('i18n changeLanguage failed:', e);
+    }
   };
+
+  useEffect(() => {
+    if (lang && i18n.language !== lang) {
+      i18n.changeLanguage(lang);
+    }
+  }, [lang]);
 
   // Funnel Actions: selectHome saves the selected FuneralHome object (including its _id and chapels array)
   const selectHome = (homeOrId) => {
@@ -155,11 +149,6 @@ export function QuoteProvider({ children }) {
 
     setSelectedFuneralHome(homeObj);
 
-    const isWestern = (homeObj?.name || '').toLowerCase().includes('western') || homeId === 'western';
-    const defaultAddons = isWestern
-      ? ['western_flower_spray', 'western_memorial_video', 'western_register_book', 'western_prayer_cards']
-      : [];
-
     setQuote(prev => ({
       ...prev,
       home: homeId,
@@ -168,7 +157,7 @@ export function QuoteProvider({ children }) {
       selectedHomeObj: homeObj,
       service: '',
       casket: '',
-      addons: defaultAddons,
+      addons: [],
       urnAllowance: '',
       priceOverrides: {}
     }));
@@ -201,35 +190,9 @@ export function QuoteProvider({ children }) {
     setSelectedService(serviceObj);
 
     setQuote(prev => {
-      let addons = [...prev.addons];
-      const homeNameLower = (prev.homeName || '').toLowerCase();
-      const isOptima = homeNameLower.includes('optima') || prev.home === 'optima';
-      const isWestern = homeNameLower.includes('western') || prev.home === 'western';
-      const isMurillo = homeNameLower.includes('murillo') || prev.home === 'murillo';
-
-      if (isOptima && serviceId === 'direct_cremation') {
-        addons = [];
-      }
-      if (isWestern && serviceId === 'direct_cremation') {
-        addons = addons.filter(id => !id.startsWith('western_'));
-      }
-      if (isWestern && serviceId === 'memorial_cremation') {
-        addons = addons.filter(id => id !== 'western_flower_spray');
-      }
-
-      if (serviceId === 'ship_direct') {
-        addons = ['air_tray'];
-      } else if (['ship_traditional', 'ship_direct'].includes(serviceId)) {
-        addons = [...new Set([...addons, 'air_tray'])];
-      } else {
-        addons = addons.filter(id => id !== 'air_tray');
-      }
-
       let urnAllowance = prev.urnAllowance;
-      if (!isCremation(serviceId) || (isWestern && serviceId === 'direct_cremation')) {
+      if (!isCremation(serviceId)) {
         urnAllowance = '';
-      } else if (isMurillo && isCremation(serviceId)) {
-        urnAllowance = String(Math.max(200, Number(prev.urnAllowance) || 200));
       }
 
       return {
@@ -238,11 +201,8 @@ export function QuoteProvider({ children }) {
         serviceName: serviceObj?.name || prev.serviceName || '',
         selectedServiceObject: serviceObj,
         casket: '',
-        addons,
-        urnAllowance,
-        airfareSelected: true,
-        airfarePrice: 1000,
-        shipDestination: 'north_america'
+        addons: prev.addons || [],
+        urnAllowance
       };
     });
   };

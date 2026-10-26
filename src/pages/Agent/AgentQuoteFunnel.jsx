@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import ProgressBar from '../../components/Agent/ProgressBar.jsx';
 import MerchandiseCard from '../../components/Agent/MerchandiseCard.jsx';
@@ -8,19 +9,21 @@ import SelectService from '../../components/Agent/SelectService.jsx';
 import ChooseCasket from '../../components/Agent/ChooseCasket.jsx';
 import AddonsOptions from '../../components/Agent/AddonsOptions.jsx';
 import QuoteSummary from '../../components/Agent/QuoteSummary.jsx';
+import LegalDocuments from '../../components/Agent/LegalDocuments.jsx';
 import Button from '../../components/common/Button.jsx';
 import InputField from '../../components/common/InputField.jsx';
 import SelectDropdown from '../../components/common/SelectDropdown.jsx';
 import {
   SERVICES,
   formatMoney,
-  t,
   isCasketNeeded,
+  isDirectCremation,
   isShipOut,
   isEligibleCasket
 } from '../../utils/quoteLogic.js';
 
 export default function AgentQuoteFunnel() {
+  const { t } = useTranslation();
   const {
     lang,
     step,
@@ -40,29 +43,28 @@ export default function AgentQuoteFunnel() {
   const [zoomedCasket, setZoomedCasket] = useState(null);
   const [customZoom, setCustomZoom] = useState(1);
 
-  const stepNamesEn = [
-    'Location & Home',
-    'Verify Home',
-    'Select Service',
-    'Choose Casket',
-    'Add-ons & Options',
-    'Quote Summary'
+  const stepNames = [
+    t('steps.location_home', lang === 'es' ? 'Ubicación y Funeraria' : 'Location & Home'),
+    t('steps.verify_home', lang === 'es' ? 'Verificar Funeraria' : 'Verify Home'),
+    t('steps.select_service', lang === 'es' ? 'Seleccionar Servicio' : 'Select Service'),
+    t('steps.choose_casket', lang === 'es' ? 'Elegir Ataúd' : 'Choose Casket'),
+    t('steps.addons_options', lang === 'es' ? 'Opciones y Extras' : 'Add-ons & Options'),
+    t('steps.quote_summary', lang === 'es' ? 'Resumen de Cotización' : 'Quote Summary'),
+    t('steps.legal_documents', lang === 'es' ? 'Documentos Legales' : 'Legal Documents')
   ];
 
-  const stepNamesEs = [
-    'Ubicación y Funeraria',
-    'Verificar Funeraria',
-    'Seleccionar Servicio',
-    'Elegir Ataúd',
-    'Opciones y Extras',
-    'Resumen de Cotización'
-  ];
-
-  const stepNames = lang === 'es' ? stepNamesEs : stepNamesEn;
-
-  // Eligible caskets for step 3
+  // Eligible caskets strictly mapped to selected Funeral Home and Service Package
   const allCaskets = db.caskets || [];
-  const eligibleCaskets = allCaskets.filter(c => isEligibleCasket(c, quote.home, quote.service));
+  const eligibleCaskets = allCaskets.filter(c =>
+    isEligibleCasket(c, quote.home || quote.homeId, quote.service, db, quote.selectedServiceObject)
+  );
+
+  const shouldSkipCasketStep = () => {
+    if (isDirectCremation(quote.service, quote.selectedServiceObject)) return true;
+    if (!isCasketNeeded(quote.service)) return true;
+    if (eligibleCaskets.length === 0) return true;
+    return false;
+  };
 
   // Navigation handlers
   const canContinue = () => {
@@ -70,7 +72,7 @@ export default function AgentQuoteFunnel() {
     if (step === 1) return Boolean(quote.home);
     if (step === 2) return Boolean(quote.service);
     if (step === 3) {
-      if (isCasketNeeded(quote.service)) {
+      if (!shouldSkipCasketStep() && isCasketNeeded(quote.service)) {
         return Boolean(quote.casket);
       }
       return true;
@@ -79,8 +81,7 @@ export default function AgentQuoteFunnel() {
   };
 
   const handleNext = () => {
-    if (step === 5) {
-      window.print();
+    if (step === 6) {
       return;
     }
     if (!canContinue()) {
@@ -91,24 +92,34 @@ export default function AgentQuoteFunnel() {
       return;
     }
 
-    // Skip casket step if not needed
-    if (step === 2 && !isCasketNeeded(quote.service)) {
+    // Skip casket step if direct cremation, not needed, or no mapped caskets
+    if (step === 2 && shouldSkipCasketStep()) {
       setStep(4);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
-    setStep(Math.min(5, step + 1));
+    setStep(Math.min(6, step + 1));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleBack = () => {
-    // If going back from addons and service didn't need casket, return to service
-    if (step === 4 && !isCasketNeeded(quote.service)) {
+    // If going back from addons and casket step was skipped, return directly to service
+    if (step === 4 && shouldSkipCasketStep()) {
       setStep(2);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     setStep(Math.max(0, step - 1));
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleStepClick = (target) => {
+    if (target === 3 && shouldSkipCasketStep()) {
+      setStep(4);
+      return;
+    }
+    setStep(target);
   };
 
   if (!calculation) {
@@ -132,9 +143,9 @@ export default function AgentQuoteFunnel() {
     <div>
       <ProgressBar
         currentStep={step}
-        totalSteps={6}
+        totalSteps={7}
         steps={stepNames}
-        onStepClick={(target) => setStep(target)}
+        onStepClick={handleStepClick}
       />
 
       <div className="main-card">
@@ -153,7 +164,7 @@ export default function AgentQuoteFunnel() {
           <SelectService
             onBack={() => setStep(1)}
             onContinue={() => {
-              if (!isCasketNeeded(quote.service)) {
+              if (shouldSkipCasketStep()) {
                 setStep(4);
               } else {
                 setStep(3);
@@ -170,7 +181,7 @@ export default function AgentQuoteFunnel() {
           />
         )}
 
-        {/* STEP 4: ADD-ONS & CASH ADVANCES (Step 5 of 6) */}
+        {/* STEP 4: ADD-ONS & CASH ADVANCES (Step 5 of 7) */}
         {step === 4 && (
           <AddonsOptions
             onBack={handleBack}
@@ -181,9 +192,29 @@ export default function AgentQuoteFunnel() {
           />
         )}
 
-        {/* STEP 5: FSA QUOTE SUMMARY (Step 6 of 6) */}
+        {/* STEP 5: FSA QUOTE SUMMARY (Step 6 of 7) */}
         {step === 5 && (
-          <QuoteSummary onBack={handleBack} />
+          <QuoteSummary
+            onBack={handleBack}
+            onContinue={() => {
+              setStep(6);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        )}
+
+        {/* STEP 6: LEGAL DOCUMENTS & DIGITAL SIGNATURE (Step 7 of 7) */}
+        {step === 6 && (
+          <LegalDocuments
+            onBack={() => {
+              setStep(5);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onContinue={() => {
+              setStep(5);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
         )}
       </div>
 

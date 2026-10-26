@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export default function ProgressBar({
   currentStep,
@@ -6,12 +7,13 @@ export default function ProgressBar({
   steps = [],
   onStepClick
 }) {
+  const { t } = useTranslation();
   const progressPercent = Math.min(100, Math.max(0, (currentStep / (totalSteps - 1)) * 100));
 
   return (
     <div className="progress-container">
       <div className="step-meta">
-        <span>Step {currentStep + 1} of {totalSteps}</span>
+        <span>{t('common.step', 'Step')} {currentStep + 1} {t('common.of', 'of')} {totalSteps}</span>
         <span>{steps[currentStep] || 'Simple Funeral Quote'}</span>
       </div>
       <div className="progress-track">

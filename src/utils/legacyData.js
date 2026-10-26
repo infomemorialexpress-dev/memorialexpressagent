@@ -2093,7 +2093,11 @@ export const LEGACY_DATA = {
           }
         ],
         "tax": 0,
-        "verified": false
+        "verified": false,
+        "customNote": "Journey",
+        "noteColor": "#008000",
+        "customNote": "Journey",
+        "noteColor": "#008000"
       },
       {
         "id": "felipe",
@@ -2111,12 +2115,20 @@ export const LEGACY_DATA = {
           }
         ],
         "tax": 11,
-        "verified": false
+        "verified": false,
+        "customNote": "Course",
+        "noteColor": "#008000",
+        "customNote": "Course",
+        "noteColor": "#008000"
       },
       {
         "id": "western",
         "name": "Western Funeral Home",
         "program": "Journey",
+        "customNote": "Journey",
+        "noteColor": "#008000",
+        "customNote": "Journey",
+        "noteColor": "#008000",
         "city": "Ontario",
         "zip": "",
         "county": "San Bernardino",
@@ -2241,6 +2253,10 @@ export const LEGACY_DATA = {
         "id": "murillo",
         "name": "Funeraria Murillo",
         "program": "Course",
+        "customNote": "Course",
+        "noteColor": "#008000",
+        "customNote": "Course",
+        "noteColor": "#008000",
         "city": "San Fernando",
         "zip": "91340",
         "county": "Los Angeles",

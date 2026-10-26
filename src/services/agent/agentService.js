@@ -1,37 +1,18 @@
-// Agent Portal Read-Only API Services
-import { getStoredDb, ApiError, formatErrorMessage } from '../base/apiClient.js';
-
-export async function fetchAgentQuoteDb() {
-  try {
-    await new Promise(resolve => setTimeout(resolve, 80));
-    const db = getStoredDb();
-    if (!db || !Array.isArray(db.homes)) {
-      throw new ApiError('Pricing catalog repository is currently unavailable.', 503);
-    }
-    return {
-      success: true,
-      db: JSON.parse(JSON.stringify(db))
-    };
-  } catch (error) {
-    console.error('[agentService.fetchAgentQuoteDb] Error:', error);
-    throw new ApiError(formatErrorMessage(error), error.status || 500);
-  }
-}
+// Agent Portal Live API Services strictly backed by MongoDB endpoints
+import api from '../api.js';
+import { ApiError, formatErrorMessage } from '../base/apiClient.js';
 
 export async function fetchFuneralHomes() {
   try {
-    await new Promise(resolve => setTimeout(resolve, 60));
-    const db = getStoredDb();
-    if (!db || !Array.isArray(db.homes)) {
-      throw new ApiError('Funeral homes directory could not be loaded.', 503);
-    }
+    const res = await api.get('/funeral-homes');
+    const homes = Array.isArray(res.data) ? res.data : [];
     return {
       success: true,
-      homes: [...db.homes]
+      homes
     };
   } catch (error) {
-    console.error('[agentService.fetchFuneralHomes] Error:', error);
-    throw new ApiError(formatErrorMessage(error), error.status || 500);
+    console.error('[agentService.fetchFuneralHomes] API Error:', error);
+    throw new ApiError(formatErrorMessage(error), error.response?.status || 500);
   }
 }
 
@@ -40,80 +21,98 @@ export async function fetchFuneralHomeById(homeId) {
     if (!homeId) {
       throw new ApiError('Funeral Home ID is required.', 400);
     }
-    await new Promise(resolve => setTimeout(resolve, 40));
-    const db = getStoredDb();
-    const home = (db.homes || []).find(h => h.id === homeId);
-    if (!home) {
-      throw new ApiError(`Funeral home with ID "${homeId}" was not found.`, 404);
-    }
+    const res = await api.get(`/funeral-homes/${homeId}`);
     return {
       success: true,
-      home: { ...home }
+      home: res.data
     };
   } catch (error) {
-    console.error(`[agentService.fetchFuneralHomeById] Error for ${homeId}:`, error);
-    throw new ApiError(formatErrorMessage(error), error.status || 500);
+    console.error(`[agentService.fetchFuneralHomeById] API Error for ${homeId}:`, error);
+    throw new ApiError(formatErrorMessage(error), error.response?.status || 500);
   }
 }
 
 export async function fetchMerchandise(homeId = null) {
   try {
-    await new Promise(resolve => setTimeout(resolve, 70));
-    const db = getStoredDb();
-    const allCaskets = db.caskets || [];
-    
-    if (!homeId) {
-      return { success: true, caskets: [...allCaskets] };
-    }
-
-    const filtered = allCaskets.filter(c => c.home === homeId || c.home === '*' || !c.home);
+    const endpoint = homeId
+      ? `/catalog/location/${homeId}?type=CASKET&onlyActive=true`
+      : '/catalog?type=CASKET';
+    const res = await api.get(endpoint);
+    const caskets = Array.isArray(res.data) ? res.data : [];
     return {
       success: true,
-      caskets: filtered
+      caskets
     };
   } catch (error) {
-    console.error('[agentService.fetchMerchandise] Error:', error);
-    throw new ApiError(formatErrorMessage(error), error.status || 500);
+    console.error('[agentService.fetchMerchandise] API Error:', error);
+    throw new ApiError(formatErrorMessage(error), error.response?.status || 500);
   }
 }
 
 export async function fetchAddons(homeId = null) {
   try {
-    await new Promise(resolve => setTimeout(resolve, 60));
-    const db = getStoredDb();
-    const allAddons = db.addons || [];
-
-    const addons = homeId
-      ? allAddons.filter(a => a.home === homeId || a.home === '*' || !a.home)
-      : [...allAddons];
-
+    const endpoint = homeId
+      ? `/catalog/location/${homeId}?type=ADDON&onlyActive=true`
+      : '/catalog?type=ADDON';
+    const res = await api.get(endpoint);
+    const addons = Array.isArray(res.data) ? res.data : [];
     return {
       success: true,
       addons,
-      fees: { ...(db.fees || {}) }
+      fees: {}
     };
   } catch (error) {
-    console.error('[agentService.fetchAddons] Error:', error);
-    throw new ApiError(formatErrorMessage(error), error.status || 500);
+    console.error('[agentService.fetchAddons] API Error:', error);
+    throw new ApiError(formatErrorMessage(error), error.response?.status || 500);
   }
 }
 
 export async function fetchPackagePricing(homeId, serviceId) {
   try {
-    if (!homeId || !serviceId) {
-      throw new ApiError('Both homeId and serviceId are required to fetch package pricing.', 400);
+    if (!homeId) {
+      throw new ApiError('Funeral Home ID is required to fetch package pricing.', 400);
     }
-    await new Promise(resolve => setTimeout(resolve, 40));
-    const db = getStoredDb();
-    const key = `${homeId}|${serviceId}`;
-    const pricing = db.packages?.[key] || null;
+    const res = await api.get(`/funeral-homes/${homeId}/packages`);
+    const packages = Array.isArray(res.data) ? res.data : [];
+    const matched = serviceId
+      ? packages.find(p => (p.id === serviceId || p._id === serviceId || p.packageName === serviceId))
+      : null;
 
     return {
       success: true,
-      pricing: pricing ? { ...pricing } : null
+      packages,
+      pricing: matched || null
     };
   } catch (error) {
-    console.error(`[agentService.fetchPackagePricing] Error for ${homeId}/${serviceId}:`, error);
-    throw new ApiError(formatErrorMessage(error), error.status || 500);
+    console.error(`[agentService.fetchPackagePricing] API Error for ${homeId}:`, error);
+    throw new ApiError(formatErrorMessage(error), error.response?.status || 500);
+  }
+}
+
+export async function fetchAgentQuoteDb() {
+  try {
+    const [homesRes, casketsRes, addonsRes] = await Promise.all([
+      api.get('/funeral-homes'),
+      api.get('/catalog?type=CASKET'),
+      api.get('/catalog?type=ADDON')
+    ]);
+
+    const homes = Array.isArray(homesRes.data) ? homesRes.data : [];
+    const caskets = Array.isArray(casketsRes.data) ? casketsRes.data : [];
+    const addons = Array.isArray(addonsRes.data) ? addonsRes.data : [];
+
+    return {
+      success: true,
+      db: {
+        homes,
+        caskets,
+        addons,
+        packages: {},
+        fees: {}
+      }
+    };
+  } catch (error) {
+    console.error('[agentService.fetchAgentQuoteDb] API Error:', error);
+    throw new ApiError(formatErrorMessage(error), error.response?.status || 500);
   }
 }

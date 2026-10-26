@@ -1,10 +1,81 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
-import { LEGACY_DATA } from '../../utils/legacyData.js';
+import { LOGOS } from '../../utils/logos.js';
+import { formatMoney } from '../../utils/quoteLogic.js';
 import { FuneralHomeCardSkeleton } from '../common/SkeletonLoader.jsx';
 import ShimmerImage from '../common/ShimmerImage.jsx';
+
+// Resolve appropriate logo or image asset for each funeral home
+function getHomeLogoSrc(home) {
+  if (home.logoUrl) return home.logoUrl;
+  const name = (home.name || '').toLowerCase();
+  const id = String(home.id || home._id || '').toLowerCase();
+  if (name.includes('optima') || id.includes('optima')) return LOGOS.OPTIMA_LOGO;
+  if (name.includes('western') || id.includes('western')) return LOGOS.WESTERN_LOGO;
+  if (name.includes('felipe') || name.includes('bagues') || id.includes('felipe')) return LOGOS.FELIPE_LOGO;
+  if (name.includes('murillo') || id.includes('murillo')) return LOGOS.MURILLO_LOGO;
+  return (
+    home.imageUrl ||
+    home.image ||
+    'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=400&q=80'
+  );
+}
+
+// Compute starting "From $X.XX" base price strictly from MongoDB packages or return null
+function getStartingPrice(home, dbPackages) {
+  if (home.startingPrice && Number(home.startingPrice) > 0) return Number(home.startingPrice);
+  if (home.minPrice && Number(home.minPrice) > 0) return Number(home.minPrice);
+
+  if (Array.isArray(home.servicePackages) && home.servicePackages.length > 0) {
+    let minTotal = Infinity;
+    for (const pkg of home.servicePackages) {
+      const s1 = Number(pkg.section1Price || 0);
+      const s2 = Number(pkg.section2Price || 0);
+      const tot = s1 + s2;
+      if (tot > 0 && tot < minTotal) {
+        minTotal = tot;
+      }
+    }
+    if (minTotal < Infinity) return minTotal;
+  }
+
+  const homeId = String(home._id || home.id || '').toLowerCase();
+  if (dbPackages && typeof dbPackages === 'object') {
+    let minTotal = Infinity;
+    for (const [key, pkg] of Object.entries(dbPackages)) {
+      const [hSlug] = key.split('|');
+      if (hSlug === homeId || hSlug === String(home._id).toLowerCase()) {
+        const s1 = Number(pkg.section1 ?? pkg.section1Price ?? 0);
+        const s2 = Number(pkg.section2 ?? pkg.section2Price ?? 0);
+        const tot = s1 + s2;
+        if (tot > 0 && tot < minTotal) {
+          minTotal = tot;
+        }
+      }
+    }
+    if (minTotal < Infinity) return minTotal;
+  }
+
+  return null;
+}
+
+// Location text formatter (e.g., "Los Angeles · Funeral home location" or "Los Angeles · Chapel location")
+function getHomeLocationLine(home, lang) {
+  const city = home.city || (home.locations && home.locations[0]?.city) || 'Los Angeles';
+  const isChapel =
+    home.type === 'chapel' ||
+    home.kind === 'chapel' ||
+    (home.name || '').toLowerCase().includes('western') ||
+    (home.locations && home.locations.length > 0 && home.locations.every((l) => l.kind === 'chapel'));
+
+  if (lang === 'es') {
+    return `${city} · ${isChapel ? 'Ubicación de capilla' : 'Ubicación de funeraria'}`;
+  }
+  return `${city} · ${isChapel ? 'Chapel location' : 'Funeral home location'}`;
+}
 
 export default function LocationSearch({ onContinue }) {
   const {
@@ -23,30 +94,34 @@ export default function LocationSearch({ onContinue }) {
   const [allHomes, setAllHomes] = useState(() => {
     if (contextHomes && contextHomes.length > 0) return contextHomes;
     if (db?.homes && db.homes.length > 0) return db.homes;
-    return LEGACY_DATA?.initialDb?.homes || [];
+    return [];
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const [localSelectedId, setLocalSelectedId] = useState(
     selectedFuneralHome?._id || selectedFuneralHome?.id || quote.home || ''
   );
 
-  // Fetch live funeral homes from backend API
+  // Fetch live funeral homes strictly from backend API
   useEffect(() => {
     let isMounted = true;
     async function loadHomes() {
       setIsLoading(true);
+      setLoadError(null);
       try {
         const res = await api.get('/funeral-homes');
         if (isMounted && res.data && Array.isArray(res.data) && res.data.length > 0) {
           setAllHomes(res.data);
         } else if (isMounted && db?.homes?.length > 0) {
           setAllHomes(db.homes);
+        } else if (isMounted) {
+          setAllHomes([]);
         }
       } catch (err) {
-        console.warn('[LocationSearch] Failed to fetch /funeral-homes, using context/fallback:', err);
+        console.error('[LocationSearch] Failed to fetch /funeral-homes:', err);
         if (isMounted) {
-          const fallback = (contextHomes && contextHomes.length > 0) ? contextHomes : (db?.homes || []);
-          if (fallback.length > 0) setAllHomes(fallback);
+          setAllHomes([]);
+          setLoadError(err.userMessage || 'Could not connect to database to load funeral homes.');
         }
       } finally {
         if (isMounted) setIsLoading(false);
@@ -144,17 +219,18 @@ export default function LocationSearch({ onContinue }) {
     selectHome(home);
   };
 
+  const { t } = useTranslation();
   const isContinueEnabled = Boolean(localSelectedId);
 
   return (
     <div>
       <h1 className="page-title">
-        {lang === 'es' ? 'Seleccione la Funeraria' : 'Select a Funeral Home'}
+        {t('location.title', lang === 'es' ? 'Seleccione la Funeraria' : 'Select a Funeral Home')}
       </h1>
       <p className="page-subtitle">
-        {lang === 'es'
+        {t('location.subtitle', lang === 'es'
           ? 'Busque por ciudad, condado o código postal para encontrar funerarias asociadas.'
-          : 'Search by city, ZIP, or county to view associated funeral homes and packages.'}
+          : 'Search by city, ZIP, or county to view associated funeral homes and packages.')}
       </p>
 
       {/* Search Header Row */}
@@ -187,11 +263,11 @@ export default function LocationSearch({ onContinue }) {
               cursor: 'pointer',
             }}
           >
-            <option value="City">City</option>
-            <option value="ZIP code">ZIP code</option>
-            <option value="County">County</option>
-            <option value="Within 15 or 20 km">Within 15 or 20 km</option>
-            <option value="Funeral home name">Funeral home name</option>
+            <option value="City">{lang === 'es' ? 'Ciudad' : 'City'}</option>
+            <option value="ZIP code">{lang === 'es' ? 'Código postal' : 'ZIP code'}</option>
+            <option value="County">{lang === 'es' ? 'Condado' : 'County'}</option>
+            <option value="Within 15 or 20 km">{lang === 'es' ? 'En un radio de 15-20 km' : 'Within 15 or 20 km'}</option>
+            <option value="Funeral home name">{lang === 'es' ? 'Nombre de la funeraria' : 'Funeral home name'}</option>
           </select>
         </div>
 
@@ -243,7 +319,7 @@ export default function LocationSearch({ onContinue }) {
               gap: '8px',
             }}
           >
-            Search
+            {t('common.search', 'Search')}
           </Button>
         </div>
       </form>
@@ -303,19 +379,11 @@ export default function LocationSearch({ onContinue }) {
           {filteredHomes.map((home) => {
             const homeId = home._id || home.id;
             const isSelected = localSelectedId === homeId;
-            const chapels = home.chapels || home.locations || [];
-
-            // Compute unique cities list
-            const chapelCities = chapels
-              .map((c) => c.city)
-              .filter(Boolean);
-            const uniqueCities = Array.from(new Set([home.city, ...chapelCities].filter(Boolean)));
-            const citiesText = uniqueCities.slice(0, 3).join(', ');
-
-            const imageUrl =
-              home.imageUrl ||
-              home.image ||
-              'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=400&q=80';
+            const logoSrc = getHomeLogoSrc(home);
+            const fromPrice = getStartingPrice(home, db?.packages);
+            const locationLine = getHomeLocationLine(home, lang);
+            const noteText = home.customNote || home.program || '';
+            const noteColor = home.noteColor || '#008000';
 
             return (
               <div
@@ -323,19 +391,20 @@ export default function LocationSearch({ onContinue }) {
                 onClick={() => handleSelectHome(home)}
                 style={{
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px',
-                  padding: '14px 16px',
-                  borderRadius: '12px',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  padding: '16px 18px',
+                  borderRadius: '14px',
                   backgroundColor: isSelected ? '#f1f6fb' : '#ffffff',
-                  border: isSelected ? '2px solid #183655' : '1.5px solid #e2e8f0',
+                  border: isSelected ? '2px solid #183655' : '1.5px solid #d5dde5',
                   boxShadow: isSelected
-                    ? '0 4px 14px rgba(24, 54, 85, 0.12)'
+                    ? '0 6px 18px rgba(24, 54, 85, 0.12)'
                     : '0 2px 6px rgba(24, 54, 85, 0.04)',
                   cursor: 'pointer',
                   transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
                   position: 'relative',
                   overflow: 'hidden',
+                  minHeight: '140px',
                 }}
                 onMouseOver={(e) => {
                   if (!isSelected) {
@@ -345,106 +414,136 @@ export default function LocationSearch({ onContinue }) {
                 }}
                 onMouseOut={(e) => {
                   if (!isSelected) {
-                    e.currentTarget.style.borderColor = '#e2e8f0';
+                    e.currentTarget.style.borderColor = '#d5dde5';
                     e.currentTarget.style.transform = 'translateY(0)';
                   }
                 }}
               >
-                {/* Funeral Home Photo with smooth shimmer */}
-                <div
-                  style={{
-                    width: '74px',
-                    height: '74px',
-                    borderRadius: '9px',
-                    overflow: 'hidden',
-                    flexShrink: 0,
-                    backgroundColor: '#f1f5f9',
-                    border: '1px solid #edf1f6',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
-                  }}
-                >
-                  <ShimmerImage
-                    src={imageUrl}
-                    alt={home.name}
-                    width="100%"
-                    height="100%"
-                    objectFit="cover"
-                    fallbackSrc="https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=400&q=80"
-                  />
-                </div>
-
-                {/* Details */}
-                <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                {/* Top Row: Logo on Left + Details on Right */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+                  {/* Funeral Home Logo */}
                   <div
                     style={{
+                      width: '88px',
+                      height: '70px',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '8px',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      backgroundColor: '#ffffff',
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                      padding: '2px',
                     }}
                   >
-                    <strong
+                    <ShimmerImage
+                      src={logoSrc}
+                      alt={home.name}
+                      width="100%"
+                      height="100%"
+                      objectFit="contain"
+                      fallbackSrc="https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=400&q=80"
+                    />
+                  </div>
+
+                  {/* Header info: Name, Colored Note, Location */}
+                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                    <div
                       style={{
-                        fontSize: '15.5px',
-                        fontWeight: 700,
-                        color: '#183655',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                      }}
+                    >
+                      <strong
+                        style={{
+                          fontSize: '15.5px',
+                          fontWeight: 700,
+                          color: '#183655',
+                          lineHeight: 1.25,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {home.name}
+                      </strong>
+
+                      {isSelected && (
+                        <span
+                          style={{
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            backgroundColor: '#183655',
+                            color: '#ffffff',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            flexShrink: 0,
+                            marginTop: '1px',
+                          }}
+                        >
+                          ✓
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Colored Note directly under Name */}
+                    {noteText && (
+                      <div
+                        style={{
+                          color: noteColor,
+                          fontWeight: 700,
+                          fontSize: '13.5px',
+                          lineHeight: 1.3,
+                          marginTop: '2px',
+                          letterSpacing: '0.01em',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {noteText}
+                      </div>
+                    )}
+
+                    {/* Location line under the note */}
+                    <div
+                      style={{
+                        fontSize: '13px',
+                        color: '#67788e',
+                        marginTop: '3px',
                         lineHeight: 1.3,
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                       }}
                     >
-                      {home.name}
-                    </strong>
-
-                    {isSelected && (
-                      <span
-                        style={{
-                          width: '20px',
-                          height: '20px',
-                          borderRadius: '50%',
-                          backgroundColor: '#183655',
-                          color: '#ffffff',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '12px',
-                          fontWeight: 800,
-                          flexShrink: 0,
-                        }}
-                      >
-                        ✓
-                      </span>
-                    )}
+                      {locationLine}
+                    </div>
                   </div>
+                </div>
 
-                  <span
-                    style={{
-                      display: 'block',
-                      fontSize: '13px',
-                      color: '#67788e',
-                      marginTop: '3px',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {citiesText || `${home.city || 'California'}, ${home.county || ''}`}
-                  </span>
-
-                  {home.program && (
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        color: '#16803b',
-                        fontWeight: 700,
-                        fontSize: '11.5px',
-                        marginTop: '4px',
-                      }}
-                    >
-                      • {home.program} Program
-                    </span>
-                  )}
+                {/* Bottom Base Price Row */}
+                <div
+                  style={{
+                    fontSize: '13px',
+                    color: '#67788e',
+                    marginTop: '10px',
+                    textAlign: 'left',
+                  }}
+                >
+                  {fromPrice && Number(fromPrice) > 0
+                    ? (lang === 'es'
+                        ? `Desde ${formatMoney(fromPrice)} · antes de mercancía y cargos`
+                        : `From ${formatMoney(fromPrice)} · before merchandise and fees`)
+                    : (lang === 'es'
+                        ? 'Precios configurados por paquete funerario'
+                        : 'Pricing configured per service package')}
                 </div>
               </div>
             );
@@ -491,7 +590,7 @@ export default function LocationSearch({ onContinue }) {
             cursor: isContinueEnabled ? 'pointer' : 'not-allowed',
           }}
         >
-          Continue →
+          {t('common.continue', 'Continue →')}
         </Button>
       </div>
     </div>

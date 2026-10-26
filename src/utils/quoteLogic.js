@@ -44,10 +44,20 @@ export function t(text, lang = 'en', directEs = null) {
 // Check if service requires a casket
 export function isCasketNeeded(service) {
   if (!service) return true;
+  let category = '';
   if (typeof service === 'object') {
-    service = service.name || service.category || service.id || service._id || '';
+    category = String(service.category || '').toLowerCase();
+    service = service.name || service.id || service._id || '';
   }
   const s = String(service).toLowerCase();
+
+  if (category === 'cremation' && (s.includes('direct') || s.includes('memorial'))) {
+    return false;
+  }
+  if (category === 'traditional' || category === 'ship-out') {
+    return true;
+  }
+
   // Pure cremations that don't need a casket
   if (s === 'direct_cremation' || s === 'memorial_cremation' || s.includes('direct cremation') || s.includes('memorial cremation')) {
     return false;
@@ -65,13 +75,23 @@ export function isCasketNeeded(service) {
 // Check if service is a cremation
 export function isCremation(service) {
   if (!service) return false;
+  if (typeof service === 'object') {
+    if (String(service.category || '').toLowerCase().includes('cremat')) return true;
+    service = service.name || service.id || '';
+  }
   const s = String(service).toLowerCase();
   return CREM_TYPES.includes(service) || s.includes('cremat');
 }
 
 // Check if service is a ship out
 export function isShipOut(service) {
-  return service === 'ship_traditional' || service === 'ship_direct';
+  if (!service) return false;
+  if (typeof service === 'object') {
+    if (String(service.category || '').toLowerCase().includes('ship')) return true;
+    service = service.name || service.id || '';
+  }
+  const s = String(service).toLowerCase();
+  return service === 'ship_traditional' || service === 'ship_direct' || s.includes('ship');
 }
 
 export function resolveHomeSlug(homeOrId, db) {
@@ -104,27 +124,90 @@ export function getPackage(db, homeId, service) {
   return db.packages[`${slug}|${service}`] || null;
 }
 
-// Check casket eligibility
-export function isEligibleCasket(casket, homeId, service, db = null) {
+// Check if service is direct cremation
+export function isDirectCremation(service, selectedServiceObject = null) {
+  const s = String(service || '').toLowerCase();
+  const cat = String(selectedServiceObject?.category || '').toLowerCase();
+  const pkgName = String(selectedServiceObject?.packageName || selectedServiceObject?.name || '').toLowerCase();
+  return (
+    s === 'direct_cremation' ||
+    s.includes('direct cremation') ||
+    cat === 'direct cremation' ||
+    cat.includes('direct cremation') ||
+    pkgName.includes('direct cremation') ||
+    (cat === 'cremation' && pkgName.includes('direct'))
+  );
+}
+
+// Check if casket matches the selected service package
+export function casketMatchesPackage(casket, service, selectedServiceObject = null) {
   if (!casket) return false;
-  if (casket.assignment === 'Global (*)' || casket.assignment === '*' || casket.home === '*' || !casket.home) {
-    return true;
+  const pkgs = casket.assignedPackages;
+  if (!Array.isArray(pkgs) || pkgs.length === 0) {
+    return true; // Available for all packages
   }
-  const slug = resolveHomeSlug(homeId, db);
-  if (slug === 'murillo') {
-    return casket.home === 'murillo' || casket.home === 'optima';
-  }
-  if (slug === 'western') {
-    return casket.home === 'western' || casket.home === 'optima';
-  }
-  if (slug === 'felipe') {
-    if (service === 'ship_direct' || service === 'ship_traditional') {
-      return casket.id && casket.id.startsWith('felipe_ship_');
+
+  const s = String(service || '').toLowerCase();
+  const pkgName = String(selectedServiceObject?.packageName || selectedServiceObject?.name || '').toLowerCase();
+  const cat = String(selectedServiceObject?.category || '').toLowerCase();
+
+  return pkgs.some(p => {
+    if (!p) return false;
+    const pLower = String(p).toLowerCase().trim();
+
+    if (pLower === s || pLower === pkgName || pLower === cat) return true;
+    if (pkgName && (pkgName.includes(pLower) || pLower.includes(pkgName))) return true;
+
+    if (pLower.includes('two') && (s === 'two_day' || pkgName.includes('two') || pkgName.includes('2 day'))) return true;
+    if (pLower.includes('one') && (s === 'one_day' || pkgName.includes('one') || pkgName.includes('1 day'))) return true;
+    if (pLower.includes('traditional cremation') && (s === 'traditional_cremation' || pkgName.includes('traditional cremation'))) return true;
+    if (pLower.includes('memorial cremation') && (s === 'memorial_cremation' || pkgName.includes('memorial cremation'))) return true;
+    if (pLower.includes('direct cremation') && (s === 'direct_cremation' || pkgName.includes('direct cremation'))) return true;
+    if ((pLower.includes('ship') || pLower.includes('forwarding')) && (isShipOut(s) || pkgName.includes('ship'))) return true;
+    if (pLower.includes('traditional') && !pLower.includes('cremat') && (cat === 'traditional' || s === 'one_day' || s === 'two_day')) return true;
+
+    return false;
+  });
+}
+
+// Check casket eligibility strictly mapped to funeral home and package
+export function isEligibleCasket(casket, homeId, service, db = null, selectedServiceObject = null) {
+  if (!casket) return false;
+
+  // 1. Strict Funeral Home Mapping
+  let matchesHome = false;
+  const assignedHome = casket.assignedFuneralHomeId || casket.funeralHomeId;
+  if (assignedHome) {
+    matchesHome = String(assignedHome) === String(homeId);
+    if (!matchesHome && db?.homes) {
+      const homeObj = db.homes.find(h => String(h.id || h._id) === String(homeId));
+      if (homeObj && (String(homeObj._id) === String(assignedHome) || String(homeObj.id) === String(assignedHome))) {
+        matchesHome = true;
+      }
     }
-    return (casket.home === 'felipe' && !casket.id.startsWith('felipe_ship_')) || casket.home === 'optima';
+  } else if (casket.assignment === 'Global (*)' || casket.assignment === '*' || casket.home === '*' || !casket.home) {
+    matchesHome = true;
+  } else {
+    const slug = resolveHomeSlug(homeId, db);
+    if (slug === 'murillo') {
+      matchesHome = casket.home === 'murillo' || casket.home === 'optima';
+    } else if (slug === 'western') {
+      matchesHome = casket.home === 'western' || casket.home === 'optima';
+    } else if (slug === 'felipe') {
+      if (service === 'ship_direct' || service === 'ship_traditional') {
+        matchesHome = Boolean(casket.id && casket.id.startsWith('felipe_ship_'));
+      } else {
+        matchesHome = (casket.home === 'felipe' && !casket.id.startsWith('felipe_ship_')) || casket.home === 'optima';
+      }
+    } else {
+      matchesHome = casket.home === 'optima' || casket.home === '*' || !casket.home || String(casket.home) === String(homeId);
+    }
   }
-  // Optima or default
-  return casket.home === 'optima' || casket.home === '*' || !casket.home;
+
+  if (!matchesHome) return false;
+
+  // 2. Strict Service Package Mapping
+  return casketMatchesPackage(casket, service, selectedServiceObject);
 }
 
 // Get matched location for a funeral home
@@ -159,37 +242,33 @@ export function calculateQuote(q, db) {
       : (pkgFromDb?.section2 ?? 0),
   };
   const allCaskets = db.caskets || [];
-  let casket = allCaskets.find(x => (x.id === q.casket || x._id === q.casket) && isEligibleCasket(x, h, q.service, db));
+  let casket = allCaskets.find(x => (x.id === q.casket || x._id === q.casket) && isEligibleCasket(x, h, q.service, db, q.selectedServiceObject));
   if (!casket && q.selectedCasketObject) {
     casket = {
       ...q.selectedCasketObject,
       price: q.selectedCasketObject.listPrice ?? q.selectedCasketObject.price ?? 0
     };
   }
-
-  const homeSlug = resolveHomeSlug(h, db);
-  const westernDirectCremation = homeSlug === 'western' && q.service === 'direct_cremation';
-  const westernRentalCasket = homeSlug === 'western' && q.service === 'traditional_cremation' ? 800 : 0;
-  const optimaRentalCasket = homeSlug === 'optima' && q.service === 'traditional_cremation' ? 700 : 0;
-  const brassUrn = westernDirectCremation ? 395 : 0;
-  const felipeRental = homeSlug === 'felipe' && q.service === 'traditional_cremation' ? 1095 : 0;
-  const felipeAlternative = homeSlug === 'felipe' && ['memorial_cremation', 'direct_cremation'].includes(q.service) ? 225 : 0;
-  const felipeAirTray = homeSlug === 'felipe' && isShipOut(q.service) ? 250 : 0;
-
-  // Urn calculation
-  let urn = 0;
-  if (h === 'murillo') {
-    urn = isCremation(q.service) ? Math.max(200, Number(q.urnAllowance) || 200) : 0;
-  } else if (isCremation(q.service) && !westernDirectCremation) {
-    const defaultUrnFee = db.fees?.urnAllowance || 300;
-    urn = Math.max(h === 'felipe' ? 300 : 0, Number(q.urnAllowance !== '' && q.urnAllowance !== undefined ? q.urnAllowance : defaultUrnFee) || 0);
+  if (casket) {
+    const casketOverride = q.priceOverrides?.[casket.id] ?? q.priceOverrides?.[casket._id] ?? q.casketPrice;
+    if (casketOverride !== undefined && casketOverride !== null && casketOverride !== '') {
+      casket = { ...casket, price: Math.max(0, Number(casketOverride) || 0) };
+    }
   }
 
-  const alternativeContainer = h === 'murillo'
-    ? 0
-    : isCremation(q.service)
-      ? (h === 'felipe' ? felipeAlternative : (h === 'western' ? 95 : 100))
-      : 0;
+  const homeSlug = resolveHomeSlug(h, db);
+  const westernDirectCremation = false;
+  const westernRentalCasket = 0;
+  const optimaRentalCasket = 0;
+  const brassUrn = 0;
+  const felipeRental = 0;
+  const felipeAlternative = 0;
+  const felipeAirTray = 0;
+
+  // Urn calculation from live quote state
+  let urn = Number(q.urnAllowance) || 0;
+
+  const alternativeContainer = Number(q.alternativeContainer) || 0;
 
   // Addons filtering
   const allAddons = db.addons || [];
@@ -239,11 +318,30 @@ export function calculateQuote(q, db) {
   const flowersQty = flower ? Math.max(1, Math.floor(Number(q.flowersQty) || 1)) : 0;
   const escortQty = escorts ? Math.max(h === 'felipe' ? 2 : 1, Math.floor(Number(q.escortQty) || 1)) : 0;
 
-  // Breakdown of user non-guaranteed add-ons
+  // Separate Guaranteed Add-ons (e.g., Memorial package with 11% tax)
+  const isGuaranteedItem = (a) => {
+    if (!a) return false;
+    const id = String(a.id || '').toLowerCase();
+    const name = String(a.name || '').toLowerCase();
+    return a.type === 'Guaranteed' || !!a.isGuaranteed || id === 'memorial' || name.includes('memorial package');
+  };
+
+  const guaranteedAddons = Array.isArray(q.guaranteedAddons) && q.guaranteedAddons.length > 0
+    ? q.guaranteedAddons
+    : (Array.isArray(q.selectedAddonObjects)
+        ? q.selectedAddonObjects.filter(isGuaranteedItem)
+        : (selectedAddonIds.includes('memorial')
+            ? [{ id: 'memorial', name: 'Memorial package — guest book, memorial cards & video', price: 395, unitPrice: 395, quantity: 1, totalPrice: 395, isGuaranteed: true }]
+            : []));
+
+  const guaranteedAddonsBasePrice = guaranteedAddons.reduce((tot, a) => tot + Number(a.totalPrice ?? a.price ?? 0), 0);
+  const guaranteedAddonsTax = Math.round(guaranteedAddonsBasePrice * 0.11 * 100) / 100;
+
+  // Breakdown of user non-guaranteed add-ons (strictly excluding guaranteed items)
   let added = [];
-  if (Array.isArray(q.selectedAddonObjects) && q.selectedAddonObjects.length > 0) {
-    added = q.selectedAddonObjects
-      .filter(a => Number(a.totalPrice ?? a.price ?? 0) > 0 && !String(a.id || '').startsWith('western_'))
+  if (Array.isArray(q.nonGuaranteedAddons) && q.nonGuaranteedAddons.length > 0) {
+    added = q.nonGuaranteedAddons
+      .filter(a => Number(a.totalPrice ?? a.price ?? 0) > 0 && !String(a.id || '').startsWith('western_') && !isGuaranteedItem(a))
       .map(a => {
         const qty = Number(a.quantity) || 1;
         const unit = Number(a.unitPrice ?? (a.quantity ? (a.price / a.quantity) : a.price) ?? 0);
@@ -254,7 +352,25 @@ export function calculateQuote(q, db) {
           price: total,
           unitPrice: unit,
           quantity: qty,
-          taxable: !!a.taxable
+          taxable: false,
+          isGuaranteed: false
+        };
+      });
+  } else if (Array.isArray(q.selectedAddonObjects) && q.selectedAddonObjects.length > 0) {
+    added = q.selectedAddonObjects
+      .filter(a => Number(a.totalPrice ?? a.price ?? 0) > 0 && !String(a.id || '').startsWith('western_') && !isGuaranteedItem(a))
+      .map(a => {
+        const qty = Number(a.quantity) || 1;
+        const unit = Number(a.unitPrice ?? (a.quantity ? (a.price / a.quantity) : a.price) ?? 0);
+        const total = Number(a.totalPrice ?? (qty * unit) ?? a.price ?? 0);
+        return {
+          id: a.id,
+          name: qty > 1 ? `${a.name} (${qty} × ${formatMoney(unit)})` : a.name,
+          price: total,
+          unitPrice: unit,
+          quantity: qty,
+          taxable: false,
+          isGuaranteed: false
         };
       });
   } else {
@@ -262,7 +378,8 @@ export function calculateQuote(q, db) {
       .filter(a =>
         !['flowers', 'murillo_flowers', 'felipe_flowers', 'memorial', 'escorts', 'murillo_escort', 'air_tray'].includes(a.id) &&
         !a.id.startsWith('western_') &&
-        !a.id.startsWith('felipe_')
+        !a.id.startsWith('felipe_') &&
+        !isGuaranteedItem(a)
       )
       .map(a => ({
         id: a.id,
@@ -270,11 +387,12 @@ export function calculateQuote(q, db) {
         price: h === 'felipe' && a.id === 'doves'
           ? (Object.prototype.hasOwnProperty.call(overrides, a.id) ? Math.max(0, Number(overrides[a.id]) || 0) : 350)
           : getItemPrice(a),
-        taxable: !!a.taxable
+        taxable: false,
+        isGuaranteed: false
       }));
 
     for (const a of felipeCashAddons) {
-      added.push({ id: a.id, name: a.name, price: getItemPrice(a), taxable: false });
+      added.push({ id: a.id, name: a.name, price: getItemPrice(a), taxable: false, isGuaranteed: false });
     }
 
     if (flower) {
@@ -282,7 +400,8 @@ export function calculateQuote(q, db) {
         id: flower.id,
         name: `Flowers (${flowersQty} arrangement${flowersQty === 1 ? '' : 's'})`,
         price: getItemPrice(flower) * flowersQty,
-        taxable: !!flower.taxable
+        taxable: false,
+        isGuaranteed: false
       });
     }
 
@@ -293,7 +412,8 @@ export function calculateQuote(q, db) {
           ? `Motorcycle escorts (${escortQty}; 10 vehicles, 25 miles included)`
           : `Funeral escorts (${escortQty})`,
         price: escortQty * (h === 'felipe' ? 200 : getItemPrice(escorts)),
-        taxable: false
+        taxable: false,
+        isGuaranteed: false
       });
     }
   }
@@ -322,6 +442,8 @@ export function calculateQuote(q, db) {
     ? Number(casketPrice) - Number(p.section2 || 0)
     : 0;
 
+  const effectiveGuaranteedMerchandise = guaranteedAddonsBasePrice > 0 ? guaranteedAddonsBasePrice : memorialPrice;
+
   const s2 = (Number(p.section2) || 0) +
     (h === 'murillo' ? murilloCasket : casketPrice) +
     westernRentalCasket +
@@ -329,7 +451,7 @@ export function calculateQuote(q, db) {
     felipeRental +
     alternativeContainer +
     brassUrn +
-    memorialPrice +
+    effectiveGuaranteedMerchandise +
     airTrayPrice +
     westernGuaranteedPrice +
     felipeGuaranteedPrice;
@@ -366,6 +488,8 @@ export function calculateQuote(q, db) {
     total,
     casket,
     packageData: p,
+    itemizedServices: q.selectedServiceObject?.itemizedServices || null,
+    serviceObj: q.selectedServiceObject || null,
     homeObj,
     matchedLoc,
     chapelExtra,
@@ -385,10 +509,92 @@ export function calculateQuote(q, db) {
     felipeRental,
     alternativeContainer,
     brassUrn,
-    memorialPrice,
+    memorialPrice: effectiveGuaranteedMerchandise,
+    guaranteedAddons,
+    guaranteedAddonsTotal: guaranteedAddonsBasePrice,
+    guaranteedAddonsTax,
     airTrayPrice,
     westernGuaranteed,
     felipeGuaranteed,
     addedAddons: added
+  };
+}
+
+/**
+ * Returns the dynamic 9-item Section 1 Itemized Services breakdown,
+ * gross subtotal, package savings, and total services amount.
+ */
+export function getItemizedServicesList(packageObj, calculation, isEs = false) {
+  const itemized =
+    packageObj?.itemizedServices ||
+    calculation?.packageData?.itemizedServices ||
+    calculation?.itemizedServices ||
+    {};
+
+  const hasItemizedValues =
+    itemized &&
+    typeof itemized === 'object' &&
+    Object.values(itemized).some(v => Number(v) > 0);
+
+  let arrangements = Number(itemized.arrangements) || 0;
+  let transfer = Number(itemized.transfer) || 0;
+  let embalming = Number(itemized.embalming) || 0;
+  let otherPreparation = Number(itemized.otherPreparation) || 0;
+  let visitation = Number(itemized.visitation) || 0;
+  let funeralService = Number(itemized.funeralService) || 0;
+  let funeralCoach = Number(itemized.funeralCoach) || 0;
+  let utilityVehicles = Number(itemized.utilityVehicles) || 0;
+  let packageSavings = Number(itemized.packageSavings) || 0;
+
+  const directS1 = Number(
+    calculation?.packageData?.section1 ||
+    packageObj?.section1Price ||
+    0
+  );
+
+  if (!hasItemizedValues) {
+    // If not explicitly itemized, use standard baseline with dynamic package savings
+    const targetTotal = directS1 > 0 ? directS1 : 3395.0;
+    arrangements = 2050.0;
+    transfer = 695.0;
+    embalming = 525.0;
+    otherPreparation = 200.0;
+    visitation = 300.0;
+    funeralService = 150.0;
+    funeralCoach = 375.0;
+    utilityVehicles = 100.0;
+    const gross = 4395.0;
+    packageSavings = Math.round((gross - targetTotal) * 100) / 100;
+  }
+
+  const grossTotal =
+    arrangements +
+    transfer +
+    embalming +
+    otherPreparation +
+    visitation +
+    funeralService +
+    funeralCoach +
+    utilityVehicles;
+
+  const totalServices = Math.max(0, grossTotal - packageSavings);
+
+  const rows = [
+    { key: 'arrangements', desc: isEs ? 'Arreglos y servicios del personal profesional' : 'Arrangements and professional staff', amount: arrangements },
+    { key: 'transfer', desc: isEs ? 'Traslado del difunto (25 millas)' : 'Transfer (25 miles)', amount: transfer },
+    { key: 'embalming', desc: isEs ? 'Embalsamamiento / refrigeración' : 'Embalming / refrigeration', amount: embalming },
+    { key: 'otherPreparation', desc: isEs ? 'Otra preparación' : 'Other preparation', amount: otherPreparation },
+    { key: 'visitation', desc: isEs ? 'Velación (3 horas)' : 'Visitation (3 hours)', amount: visitation },
+    { key: 'funeralService', desc: isEs ? 'Servicio funerario / memorial' : 'Funeral/memorial service', amount: funeralService },
+    { key: 'funeralCoach', desc: isEs ? 'Carroza funeraria' : 'Funeral coach', amount: funeralCoach },
+    { key: 'utilityVehicles', desc: isEs ? 'Vehículos utilitarios / otros' : 'Utility vehicles / other', amount: utilityVehicles },
+    { key: 'packageSavings', desc: isEs ? 'Ahorro de paquete' : 'Package savings', amount: -Math.abs(packageSavings), isSavings: true },
+  ];
+
+  return {
+    rows,
+    grossTotal,
+    packageSavings,
+    totalServices,
   };
 }

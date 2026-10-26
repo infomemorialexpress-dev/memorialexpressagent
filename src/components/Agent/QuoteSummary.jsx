@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
-import { formatMoney, SERVICES } from '../../utils/quoteLogic.js';
+import { formatMoney, SERVICES, getItemizedServicesList } from '../../utils/quoteLogic.js';
 import { generateFSAPdf } from '../../utils/FSA_Generator.js';
 import { QuoteSummarySkeleton } from '../common/SkeletonLoader.jsx';
 
-export default function QuoteSummary({ onBack }) {
+export default function QuoteSummary({ onBack, onContinue }) {
+  const { t } = useTranslation();
   const { lang, quote, calculation, db, addToast } = useQuote();
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
@@ -34,25 +36,14 @@ export default function QuoteSummary({ onBack }) {
     );
   }
 
-  // ================= 1. STATIC (HARDCODED) ELEMENTS =================
-  // Hardcoded Section I itemized service breakdown and savings per client requirements (always totaling $3,395.00)
-  const selectedServiceS1 = Number(calculation.packageData?.section1 || quote.selectedServiceObject?.section1Price || 0);
-  const effectiveServicesTotal = selectedServiceS1 > 0 ? selectedServiceS1 : 3395.00;
-  const packageSavingsAmount = Math.round((effectiveServicesTotal - 4395.00) * 100) / 100;
-
-  const STATIC_SECTION_1_SERVICES = [
-    { desc: isEs ? 'Arreglos y servicios del personal profesional' : 'Arrangements and professional staff', amount: 2050.00 },
-    { desc: isEs ? 'Traslado del difunto (25 millas)' : 'Transfer (25 miles)', amount: 695.00 },
-    { desc: isEs ? 'Embalsamamiento / refrigeración' : 'Embalming / refrigeration', amount: 525.00 },
-    { desc: isEs ? 'Otra preparación' : 'Other preparation', amount: 200.00 },
-    { desc: isEs ? 'Velación (3 horas)' : 'Visitation (3 hours)', amount: 300.00 },
-    { desc: isEs ? 'Servicio funerario / memorial' : 'Funeral/memorial service', amount: 150.00 },
-    { desc: isEs ? 'Carroza funeraria' : 'Funeral coach', amount: 375.00 },
-    { desc: isEs ? 'Vehículos utilitarios / otros' : 'Utility vehicles / other', amount: 100.00 },
-    { desc: isEs ? 'Ahorro de paquete' : 'Package savings', amount: packageSavingsAmount },
-  ];
-
-  const STATIC_SERVICES_TOTAL = effectiveServicesTotal;
+  // ================= 1. DYNAMIC SECTION I SERVICES =================
+  const itemizedBreakdown = getItemizedServicesList(
+    quote.selectedServiceObject || calculation.serviceObj,
+    calculation,
+    isEs
+  );
+  const dynamicItemizedServices = itemizedBreakdown.rows;
+  const effectiveServicesTotal = itemizedBreakdown.totalServices;
   const STATIC_DISPOSITION_PERMIT_FEE = 12.00;
   const STATIC_DEATH_CERT_UNIT_PRICE = (quote.deathCertUnitPrice && quote.deathCertUnitPrice !== 26 && quote.deathCertUnitPrice !== 24)
     ? Number(quote.deathCertUnitPrice)
@@ -79,23 +70,51 @@ export default function QuoteSummary({ onBack }) {
   const dynamicConstruction = casket.material || casket.construction || '20-gauge steel';
   const dynamicModel = casket.model || casket.modelNumber || '—';
 
-  const dynamicTotalMerchandise = dynamicCasketPrice;
+  // Guaranteed Add-ons from Step 5 (e.g., Memorial package)
+  const isGuaranteedItem = (a) => {
+    if (!a) return false;
+    const id = String(a.id || '').toLowerCase();
+    const name = String(a.name || '').toLowerCase();
+    return !!a.isGuaranteed || id === 'memorial' || name.includes('memorial package');
+  };
+
+  const guaranteedAddons = Array.isArray(quote.guaranteedAddons) && quote.guaranteedAddons.length > 0
+    ? quote.guaranteedAddons
+    : (Array.isArray(quote.selectedAddonObjects)
+        ? quote.selectedAddonObjects.filter(isGuaranteedItem)
+        : (quote.addons?.includes('memorial')
+            ? [{ id: 'memorial', name: 'Memorial package — guest book, memorial cards & video', price: 395, unitPrice: 395, quantity: 1, totalPrice: 395, isGuaranteed: true }]
+            : []));
+
+  const guaranteedAddonsTotal = guaranteedAddons.reduce(
+    (sum, a) => sum + Number(a.totalPrice ?? a.price ?? 0),
+    0
+  );
+
+  // 11% tax on guaranteed merchandise (itemPrice * 0.11)
+  const guaranteedAddonsTax = Math.round(guaranteedAddonsTotal * 0.11 * 100) / 100;
+
+  // Add base price of any selected guaranteedAddons to TOTAL MERCHANDISE & TOTAL GUARANTEED FUNERAL PRICE
+  const dynamicTotalMerchandise = dynamicCasketPrice + guaranteedAddonsTotal;
   const dynamicTotalGuaranteed = effectiveServicesTotal + dynamicTotalMerchandise;
 
   // Non-Guaranteed Cash Advance Items:
-  // 1. Dynamic Death certificates: quantity * $24
+  // 1. Dynamic Death certificates: quantity * $94
   const dynamicCertsCount = Math.max(1, Number(quote.certs || quote.deathCertCount || calculation.certsCount || 1));
   const dynamicCertsTotal = dynamicCertsCount * STATIC_DEATH_CERT_UNIT_PRICE;
 
-  // 2. Dynamic Selected Add-ons from Step 5 (excluding internal zero-dollar keys)
-  const dynamicSelectedAddons = (Array.isArray(calculation.addedAddons) ? calculation.addedAddons : [])
+  // 2. Dynamic Selected Non-Guaranteed Add-ons from Step 5 (Flowers, Dove release, Music, etc.)
+  const dynamicSelectedAddons = (Array.isArray(quote.nonGuaranteedAddons) && quote.nonGuaranteedAddons.length > 0
+    ? quote.nonGuaranteedAddons
+    : (Array.isArray(calculation.addedAddons) ? calculation.addedAddons : (quote.selectedAddonObjects || [])))
     .filter(addon => {
       const aPrice = typeof addon === 'object' && addon.price !== undefined ? Number(addon.price) : 0;
       const aName = typeof addon === 'string' ? addon : (addon.name || '');
       const aId = typeof addon === 'object' && addon.id ? String(addon.id) : '';
-      if (aPrice <= 0) return false;
+      if (aPrice <= 0 && aId !== 'music') return false;
       if (aName.startsWith('western_') || aName.startsWith('felipe_')) return false;
       if (aId.startsWith('western_') || aId.startsWith('felipe_')) return false;
+      if (isGuaranteedItem(addon)) return false;
       return true;
     });
 
@@ -104,8 +123,9 @@ export default function QuoteSummary({ onBack }) {
     0
   );
 
-  // 3. Dynamic Sales Tax: explicitly 9.5% calculated on taxable merchandise (casket price)
-  const dynamicSalesTax = Math.round(dynamicCasketPrice * STATIC_SALES_TAX_RATE * 100) / 100;
+  // 3. Dynamic Sales Tax: casket tax (9.5%) + 11% guaranteed items tax
+  const casketSalesTax = Math.round(dynamicCasketPrice * STATIC_SALES_TAX_RATE * 100) / 100;
+  const dynamicSalesTax = Math.round((casketSalesTax + guaranteedAddonsTax) * 100) / 100;
 
   // 4. Disposition Permit: $12.00
   const dynamicDispositionPermit = STATIC_DISPOSITION_PERMIT_FEE;
@@ -128,13 +148,23 @@ export default function QuoteSummary({ onBack }) {
     setIsGeneratingPdf(true);
     try {
       generateFSAPdf({
-        quote,
+        quote: {
+          ...quote,
+          guaranteedAddons,
+          nonGuaranteedAddons: dynamicSelectedAddons,
+          guaranteedAddonsTotal,
+          guaranteedAddonsTax,
+        },
         calculation: {
           ...calculation,
           s1: STATIC_SERVICES_TOTAL,
           s2: dynamicTotalMerchandise,
+          guaranteedAddons,
+          guaranteedAddonsTotal,
+          guaranteedAddonsTax,
           totalGuaranteed: dynamicTotalGuaranteed,
           salesTax: dynamicSalesTax,
+          casketSalesTax,
           dispositionPermitFee: dynamicDispositionPermit,
           certsCount: dynamicCertsCount,
           deathCertFee: STATIC_DEATH_CERT_UNIT_PRICE,
@@ -323,11 +353,11 @@ export default function QuoteSummary({ onBack }) {
                 {isEs ? 'Servicios Detallados' : 'Itemized Services'}
               </div>
 
-              {/* Hardcoded Itemized Service Rows */}
+              {/* Dynamic Itemized Service Rows */}
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px' }}>
                 <tbody>
-                  {STATIC_SECTION_1_SERVICES.map((row, idx) => {
-                    const isSavings = row.amount < 0;
+                  {dynamicItemizedServices.map((row, idx) => {
+                    const isSavings = row.isSavings || row.amount < 0 || row.key === 'packageSavings';
                     return (
                       <tr key={idx} style={{ borderBottom: '1px solid #cbd5e1' }}>
                         <td style={{ padding: '3.5px 6px', color: '#000000' }}>
@@ -353,7 +383,7 @@ export default function QuoteSummary({ onBack }) {
               </table>
             </div>
 
-            {/* Total Services Footer (Always Static $3,395.00) */}
+            {/* Total Services Footer */}
             <div
               style={{
                 display: 'flex',
@@ -377,7 +407,7 @@ export default function QuoteSummary({ onBack }) {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {formatMoney(STATIC_SERVICES_TOTAL)}
+                {formatMoney(effectiveServicesTotal)}
               </div>
             </div>
           </div>
@@ -580,13 +610,39 @@ export default function QuoteSummary({ onBack }) {
                       {isEs ? 'Mercancía Garantizada' : 'Guaranteed Merchandise'}
                     </td>
                   </tr>
-                  <tr style={{ borderBottom: '1px solid #000000' }}>
-                    <td colSpan={2} style={{ padding: '3px 6px', color: '#4b5563', fontStyle: 'italic' }}>
-                      {isEs
-                        ? 'No se seleccionó mercancía garantizada adicional'
-                        : 'No additional guaranteed merchandise selected'}
-                    </td>
-                  </tr>
+                  {guaranteedAddons.length > 0 ? (
+                    guaranteedAddons.map((item, idx) => {
+                      const iName = item.quantity > 1 ? `${item.name} (${item.quantity} × ${formatMoney(item.unitPrice)})` : item.name;
+                      const iPrice = Number(item.totalPrice ?? item.price ?? 0);
+                      return (
+                        <tr key={idx} style={{ borderBottom: '1px solid #cbd5e1' }}>
+                          <td style={{ padding: '3px 6px', color: '#111827' }}>
+                            {iName}
+                          </td>
+                          <td
+                            style={{
+                              padding: '3px 6px',
+                              textAlign: 'right',
+                              fontWeight: 'bold',
+                              borderLeft: '1px solid #000000',
+                              width: '85px',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {formatMoney(iPrice)}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr style={{ borderBottom: '1px solid #000000' }}>
+                      <td colSpan={2} style={{ padding: '3px 6px', color: '#4b5563', fontStyle: 'italic' }}>
+                        {isEs
+                          ? 'No se seleccionó mercancía garantizada adicional'
+                          : 'No additional guaranteed merchandise selected'}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -741,7 +797,14 @@ export default function QuoteSummary({ onBack }) {
                 <tbody>
                   <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
                     <td style={{ padding: '4px 6px' }}>
-                      {isEs ? 'Impuesto sobre Ventas' : 'Sales Tax'}
+                      <div>{isEs ? 'Impuesto sobre Ventas' : 'Sales Tax'}</div>
+                      {guaranteedAddonsTax > 0 && (
+                        <div style={{ fontSize: '9px', color: '#64748b', marginTop: '1px' }}>
+                          {isEs
+                            ? `(incluye 11% sobre mercancía garantizada: ${formatMoney(guaranteedAddonsTax)})`
+                            : `(includes 11% tax on guaranteed items: ${formatMoney(guaranteedAddonsTax)})`}
+                        </div>
+                      )}
                     </td>
                     <td
                       style={{
@@ -996,6 +1059,27 @@ export default function QuoteSummary({ onBack }) {
               : (isEs ? 'Imprimir / Guardar FSA' : 'Print / Save FSA Quote')}
           </span>
         </Button>
+
+        {onContinue && (
+          <Button
+            variant="primary"
+            onClick={onContinue}
+            style={{
+              backgroundColor: '#145633',
+              borderColor: '#145633',
+              padding: '12px 28px',
+              fontSize: '14.5px',
+              fontWeight: 700,
+              borderRadius: '8px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 3px 8px rgba(20, 86, 51, 0.25)',
+            }}
+          >
+            <span>{isEs ? 'Documentos Legales y Firmas →' : 'Proceed to Legal Documents →'}</span>
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -1,18 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
+import { formatMoney } from '../../utils/quoteLogic.js';
 import { ServiceCardSkeleton } from '../common/SkeletonLoader.jsx';
-
-const CANONICAL_SERVICES_FALLBACK = [
-  { _id: 'two_day', name: 'Two-day service', category: 'Traditional', specifications: 'Traditional 2-day viewing & chapel service', section1Price: 3800, section2Price: 1200 },
-  { _id: 'one_day', name: 'One-day service funeral', category: 'Traditional', specifications: 'Same-day viewing & funeral service', section1Price: 3395, section2Price: 0 },
-  { _id: 'traditional_cremation', name: 'Traditional cremation', category: 'Cremation', specifications: 'Full viewing & funeral ceremony prior to cremation', section1Price: 3760, section2Price: 1295 },
-  { _id: 'memorial_cremation', name: 'Memorial cremation', category: 'Cremation', specifications: 'Cremation with subsequent chapel memorial ceremony', section1Price: 2620, section2Price: 675 },
-  { _id: 'direct_cremation', name: 'Direct cremation', category: 'Cremation', specifications: 'Direct disposition without viewing or ceremony', section1Price: 2130, section2Price: 175 },
-  { _id: 'ship_traditional', name: 'Ship out with funeral', category: 'Ship Out', specifications: 'Preparation & service prior to domestic/international transit', section1Price: 3355, section2Price: 0 },
-  { _id: 'ship_direct', name: 'Direct ship out', category: 'Ship Out', specifications: 'Direct transfer to airport for forwarding', section1Price: 2065, section2Price: 0 },
-];
 
 export default function SelectService({ onBack, onContinue }) {
   const {
@@ -24,8 +16,10 @@ export default function SelectService({ onBack, onContinue }) {
     addToast
   } = useQuote();
 
-  const [services, setServices] = useState(() => CANONICAL_SERVICES_FALLBACK);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const { t } = useTranslation();
+
+  const [services, setServices] = useState([]);
+  const [isSyncing, setIsSyncing] = useState(true);
   const [error, setError] = useState(null);
   const [localSelectedService, setLocalSelectedService] = useState(
     selectedService || quote.selectedServiceObject || null
@@ -54,33 +48,78 @@ export default function SelectService({ onBack, onContinue }) {
     let isMounted = true;
 
     async function fetchServices() {
-      const targetHomeId = funeralHomeId || 'optima';
+      if (!funeralHomeId) {
+        if (isMounted) {
+          setServices([]);
+          setIsSyncing(false);
+        }
+        return;
+      }
 
       setIsSyncing(true);
       setError(null);
       try {
-        const response = await api.get(`/catalog/location/${targetHomeId}?type=SERVICE`);
-        const data = response.data || [];
+        const [catRes, homePkgsRes] = await Promise.allSettled([
+          api.get(`/catalog/location/${funeralHomeId}?type=SERVICE`),
+          api.get(`/funeral-homes/${funeralHomeId}/packages`)
+        ]);
+
+        const catData = catRes.status === 'fulfilled' && Array.isArray(catRes.value.data) ? catRes.value.data : [];
+        const homePkgsData = homePkgsRes.status === 'fulfilled' && Array.isArray(homePkgsRes.value.data) ? homePkgsRes.value.data : [];
+
+        // Combine catalog items and funeral home custom packages
+        const combined = [...catData];
+        for (const hp of homePkgsData) {
+          const hpId = hp._id || hp.id;
+          const hpName = hp.packageName || hp.name || '';
+          const existingIdx = combined.findIndex(
+            c => (c._id || c.id) === hpId || (c.name && c.name.toLowerCase() === hpName.toLowerCase())
+          );
+          if (existingIdx >= 0) {
+            combined[existingIdx] = {
+              ...combined[existingIdx],
+              section1Price: hp.section1Price !== undefined ? Number(hp.section1Price) : combined[existingIdx].section1Price,
+              section2Price: hp.section2Price !== undefined ? Number(hp.section2Price) : combined[existingIdx].section2Price,
+              category: hp.category || combined[existingIdx].category,
+              itemizedServices: hp.itemizedServices || combined[existingIdx].itemizedServices,
+            };
+          } else {
+            combined.push({
+              _id: hpId,
+              id: hpId,
+              name: hpName,
+              packageName: hpName,
+              category: hp.category || 'Traditional',
+              section1Price: Number(hp.section1Price) || 0,
+              section2Price: Number(hp.section2Price) || 0,
+              isCustom: true,
+            });
+          }
+        }
+
+        const data = combined;
 
         // Deduplicate services by name
         const unique = [];
         const seen = new Set();
         for (const item of data) {
-          const key = (item.name || '').trim().toLowerCase();
+          const key = (item.name || item.packageName || '').trim().toLowerCase();
           if (!seen.has(key)) {
             seen.add(key);
             unique.push(item);
           }
         }
 
-        // Sort by canonical presentation order
+        // Sort: standard canonical services first by weight, then custom packages
         unique.sort((a, b) => {
-          const wA = orderWeights[(a.name || '').toLowerCase()] || 99;
-          const wB = orderWeights[(b.name || '').toLowerCase()] || 99;
+          const nameA = (a.name || a.packageName || '').toLowerCase();
+          const nameB = (b.name || b.packageName || '').toLowerCase();
+          const wA = orderWeights[nameA] || (a.isCustom ? 100 : 50);
+          const wB = orderWeights[nameB] || (b.isCustom ? 100 : 50);
           return wA - wB;
         });
 
-        const finalServices = unique.length > 0 ? unique : CANONICAL_SERVICES_FALLBACK;
+        const finalServices = unique;
 
         if (isMounted) {
           setServices(finalServices);
@@ -95,10 +134,10 @@ export default function SelectService({ onBack, onContinue }) {
           }
         }
       } catch (err) {
-        console.warn('[SelectService] Live fetch failed, using canonical fallback:', err);
+        console.warn('[SelectService] Live fetch failed:', err);
         if (isMounted) {
-          setServices(CANONICAL_SERVICES_FALLBACK);
-          setError(null);
+          setServices([]);
+          setError(lang === 'es' ? 'Error al cargar los servicios desde la base de datos.' : 'Failed to load services from the database.');
         }
       } finally {
         if (isMounted) {
@@ -137,12 +176,12 @@ export default function SelectService({ onBack, onContinue }) {
   return (
     <div>
       <h1 className="page-title">
-        {lang === 'es' ? 'Seleccione el Servicio Funerario' : 'Select Funeral Service'}
+        {t('service.title', lang === 'es' ? 'Seleccione el Servicio Funerario' : 'Select Funeral Service')}
       </h1>
       <p className="page-subtitle">
-        {lang === 'es'
+        {t('service.subtitle', lang === 'es'
           ? 'Elija entre servicios tradicionales, cremación o traslados nacionales e internacionales.'
-          : 'Choose from traditional burial, viewing, cremation, or shipping services.'}
+          : 'Choose from traditional burial, viewing, cremation, or shipping services.')}
       </p>
 
       {/* Non-blocking live background sync badge */}
@@ -311,6 +350,52 @@ export default function SelectService({ onBack, onContinue }) {
                 >
                   {subtitleText}
                 </span>
+
+                {/* Category Badge & Total Package Rate */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    marginTop: '8px',
+                    paddingTop: '6px',
+                    borderTop: '1px solid #f1f5f9',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 650,
+                      padding: '2px 8px',
+                      borderRadius: '5px',
+                      backgroundColor: (svc.category || '').toLowerCase().includes('cremat')
+                        ? '#fef3c7'
+                        : (svc.category || '').toLowerCase().includes('ship')
+                        ? '#f1f5f9'
+                        : '#eff6ff',
+                      color: (svc.category || '').toLowerCase().includes('cremat')
+                        ? '#b45309'
+                        : (svc.category || '').toLowerCase().includes('ship')
+                        ? '#475569'
+                        : '#1d4ed8',
+                    }}
+                  >
+                    {svc.category || 'Traditional'}
+                  </span>
+
+                  {(Number(svc.section1Price) > 0 || Number(svc.section2Price) > 0) && (
+                    <span
+                      style={{
+                        fontSize: '14.5px',
+                        fontWeight: 750,
+                        color: '#183655',
+                      }}
+                    >
+                      {formatMoney((Number(svc.section1Price) || 0) + (Number(svc.section2Price) || 0))}
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -320,7 +405,7 @@ export default function SelectService({ onBack, onContinue }) {
       {/* Empty State */}
       {!isSyncing && services.length === 0 && !error && (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
-          <p>No funeral services available for the selected location.</p>
+          <p>{lang === 'es' ? 'No hay servicios funerarios disponibles para la ubicación seleccionada.' : 'No funeral services available for the selected location.'}</p>
         </div>
       )}
 
@@ -349,7 +434,7 @@ export default function SelectService({ onBack, onContinue }) {
             color: '#253851',
           }}
         >
-          ← Back
+          ← {t('common.back', 'Back')}
         </Button>
 
         <Button
@@ -368,7 +453,7 @@ export default function SelectService({ onBack, onContinue }) {
             cursor: isContinueDisabled ? 'not-allowed' : 'pointer',
           }}
         >
-          Continue →
+          {t('common.continue', 'Continue →')}
         </Button>
       </div>
     </div>

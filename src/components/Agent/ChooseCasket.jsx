@@ -1,41 +1,21 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
-import { formatMoney, CATALOG_CASKETS, isEligibleCasket } from '../../utils/quoteLogic.js';
+import { formatMoney, isEligibleCasket } from '../../utils/quoteLogic.js';
 import { CasketCardSkeleton } from '../common/SkeletonLoader.jsx';
 import ShimmerImage from '../common/ShimmerImage.jsx';
 
-// Canonical fallback caskets generator for instantaneous zero-delay rendering
-const getInitialFallbackCaskets = (homeId, service) => {
-  const fallbackList = (CATALOG_CASKETS || []).map((cat) => ({
-    _id: cat.id,
-    id: cat.id,
-    name: cat.name,
-    listPrice: cat.price,
-    price: cat.price,
-    imageUrl: cat.image,
-    image: cat.image,
-    specifications: cat.description,
-    description: cat.description,
-    productCode: cat.productCode,
-    assignment: 'Global (*)',
-    home: cat.home || 'optima'
-  }));
-
-  const eligible = fallbackList.filter((c) =>
-    isEligibleCasket(c, homeId || 'optima', service || 'one_day')
-  );
-  return eligible.length > 0 ? eligible : fallbackList;
-};
-
 export default function ChooseCasket({ onBack, onContinue }) {
+  const { t } = useTranslation();
   const {
     lang,
     quote,
     selectedFuneralHome,
     selectedCasket,
     selectCasket,
+    updatePriceOverride,
     addToast
   } = useQuote();
 
@@ -47,12 +27,13 @@ export default function ChooseCasket({ onBack, onContinue }) {
     quote.homeId ||
     '';
 
-  const [caskets, setCaskets] = useState(() => getInitialFallbackCaskets(funeralHomeId, quote.service));
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [caskets, setCaskets] = useState([]);
+  const [isSyncing, setIsSyncing] = useState(true);
   const [error, setError] = useState(null);
   const [localSelectedCasket, setLocalSelectedCasket] = useState(
     selectedCasket || quote.selectedCasketObject || null
   );
+  const [customPrices, setCustomPrices] = useState({});
 
   // Zoom modal state with pan & directional navigation
   const [zoomModalCasket, setZoomModalCasket] = useState(null);
@@ -159,59 +140,49 @@ export default function ChooseCasket({ onBack, onContinue }) {
     let isMounted = true;
 
     async function fetchCaskets() {
+      if (!funeralHomeId) {
+        if (isMounted) {
+          setCaskets([]);
+          setIsSyncing(false);
+        }
+        return;
+      }
+
       setIsSyncing(true);
       setError(null);
 
-      // Prepare canonical fallback items
-      const fallbackList = (CATALOG_CASKETS || []).map((cat) => ({
-        _id: cat.id,
-        id: cat.id,
-        name: cat.name,
-        listPrice: cat.price,
-        price: cat.price,
-        imageUrl: cat.image,
-        image: cat.image,
-        specifications: cat.description,
-        description: cat.description,
-        productCode: cat.productCode,
-        assignment: 'Global (*)',
-        home: cat.home || 'optima'
-      }));
-
       try {
-        let backendItems = [];
-        if (funeralHomeId) {
-          try {
-            const response = await api.get(`/catalog/location/${funeralHomeId}?type=CASKET`);
-            backendItems = Array.isArray(response.data) ? response.data : [];
-          } catch (apiErr) {
-            console.warn('[ChooseCasket] Live backend fetch error, falling back to catalog:', apiErr);
-          }
-        }
+        const response = await api.get(`/catalog/location/${funeralHomeId}?type=CASKET&onlyActive=true`);
+        const rawItems = Array.isArray(response.data) ? response.data : [];
+        const backendItems = rawItems
+          .filter((item) => {
+            const price = item.listPrice !== null && item.listPrice !== undefined ? Number(item.listPrice) : Number(item.price);
+            return price > 0 && item.isActive !== false;
+          })
+          .map((item) => ({
+            _id: item._id || item.id,
+            id: item._id || item.id,
+            name: item.name,
+            listPrice: Number(item.listPrice || item.price || 0),
+            price: Number(item.listPrice || item.price || 0),
+            imageUrl: item.imageUrl || item.image || '',
+            image: item.imageUrl || item.image || '',
+            specifications: item.specifications || item.description || '',
+            description: item.specifications || item.description || '',
+            assignedPackages: Array.isArray(item.assignedPackages) ? item.assignedPackages : [],
+            assignedFuneralHomeId: item.assignedFuneralHomeId || item.funeralHomeId,
+            funeralHomeId: item.assignedFuneralHomeId || item.funeralHomeId,
+            home: item.assignedFuneralHomeId || item.funeralHomeId || funeralHomeId
+          }));
 
-        // Combine backend items with canonical catalog items to guarantee complete selection
-        const rawCombined = [...backendItems];
-        for (const cat of fallbackList) {
-          const catName = (cat.name || '').trim().toLowerCase();
-          const alreadyExists = rawCombined.some(
-            (item) => (item.name || '').trim().toLowerCase() === catName
-          );
-          if (!alreadyExists) {
-            rawCombined.push(cat);
-          }
-        }
-
-        // Filter eligible caskets for this home / service
-        const eligible = rawCombined.filter((c) =>
-          isEligibleCasket(c, funeralHomeId || quote.home, quote.service)
+        const eligible = backendItems.filter((c) =>
+          isEligibleCasket(c, funeralHomeId || quote.home, quote.service, null, quote.selectedServiceObject)
         );
-
-        const listToProcess = eligible.length > 0 ? eligible : (rawCombined.length > 0 ? rawCombined : fallbackList);
 
         // Deduplicate and canonicalize
         const unique = [];
         const seen = new Set();
-        for (const item of listToProcess) {
+        for (const item of eligible) {
           const key = (item.name || '').trim().toLowerCase();
           if (key && !seen.has(key)) {
             seen.add(key);
@@ -244,9 +215,10 @@ export default function ChooseCasket({ onBack, onContinue }) {
           }
         }
       } catch (err) {
-        console.error('[ChooseCasket] Failed to process caskets:', err);
+        console.error('[ChooseCasket] Live fetch error:', err);
         if (isMounted) {
-          setCaskets(fallbackList);
+          setCaskets([]);
+          setError(lang === 'es' ? 'Error al cargar los ataúdes desde la base de datos.' : 'Failed to load caskets from the database.');
         }
       } finally {
         if (isMounted) {
@@ -260,10 +232,27 @@ export default function ChooseCasket({ onBack, onContinue }) {
     return () => {
       isMounted = false;
     };
-  }, [funeralHomeId, quote.service]);
+  }, [funeralHomeId, quote.service, quote.selectedServiceObject]);
+
+  const handlePriceChange = (casket, val) => {
+    if (casket.isFixedPrice) return;
+    const casketKey = casket._id || casket.id || casket.productCode || casket.name;
+    setCustomPrices(prev => ({ ...prev, [casketKey]: val }));
+    const numVal = Math.max(0, Number(val) || 0);
+    updatePriceOverride(casketKey, numVal);
+    const updated = { ...casket, price: numVal, listPrice: numVal };
+    setLocalSelectedCasket(updated);
+    selectCasket(updated);
+  };
 
   const handleCardClick = (casket) => {
-    setLocalSelectedCasket(casket);
+    const casketKey = casket._id || casket.id || casket.productCode || casket.name;
+    const existingOverride = customPrices[casketKey] !== undefined
+      ? Number(customPrices[casketKey])
+      : (quote.priceOverrides?.[casketKey] ?? casket.listPrice ?? casket.price ?? 0);
+    const updated = { ...casket, price: existingOverride, listPrice: existingOverride };
+    setLocalSelectedCasket(updated);
+    selectCasket(updated);
   };
 
   const handleContinue = () => {
@@ -275,8 +264,13 @@ export default function ChooseCasket({ onBack, onContinue }) {
       return;
     }
 
-    // Save the selected casket object (including its listPrice) into QuoteContext
-    selectCasket(localSelectedCasket);
+    const casketKey = localSelectedCasket._id || localSelectedCasket.id || localSelectedCasket.productCode || localSelectedCasket.name;
+    const activePrice = customPrices[casketKey] !== undefined
+      ? Number(customPrices[casketKey])
+      : (quote.priceOverrides?.[casketKey] ?? localSelectedCasket.price ?? localSelectedCasket.listPrice ?? 0);
+    const finalized = { ...localSelectedCasket, price: activePrice, listPrice: activePrice };
+    selectCasket(finalized);
+    updatePriceOverride(casketKey, activePrice);
     onContinue();
   };
 
@@ -397,6 +391,9 @@ export default function ChooseCasket({ onBack, onContinue }) {
               (casket._id ? casket._id.slice(-8) : '71006846');
 
             const priceVal = casket.listPrice ?? casket.price ?? 0;
+            const currentPrice = customPrices[casketKey] !== undefined
+              ? Number(customPrices[casketKey])
+              : (quote.priceOverrides?.[casketKey] ?? casket.listPrice ?? casket.price ?? 0);
 
             return (
               <div
@@ -535,42 +532,96 @@ export default function ChooseCasket({ onBack, onContinue }) {
 
                 {/* Bottom Section: Price, Guaranteed Badge, & Zoom Button */}
                 <div>
-                  {/* Price Row with GUARANTEED badge */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      marginBottom: '12px'
-                    }}
-                  >
-                    <span
+                  {/* Price Row with GUARANTEED badge and Editable Price Input when selected */}
+                  <div style={{ marginBottom: '12px' }}>
+                    <div
                       style={{
-                        fontSize: '20px',
-                        fontWeight: 800,
-                        color: '#183655'
-                      }}
-                    >
-                      {formatMoney(priceVal)}
-                    </span>
-
-                    <span
-                      style={{
-                        backgroundColor: '#eafbf1',
-                        color: '#15803d',
-                        fontWeight: 750,
-                        fontSize: '10.5px',
-                        letterSpacing: '0.6px',
-                        padding: '3px 8px',
-                        borderRadius: '5px',
-                        display: 'inline-flex',
+                        display: 'flex',
                         alignItems: 'center',
-                        border: '1px solid #bbf7d0',
-                        textTransform: 'uppercase'
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        marginBottom: isSelected ? '8px' : '0'
                       }}
                     >
-                      {lang === 'es' ? 'GARANTIZADO' : 'GUARANTEED'}
-                    </span>
+                      <span
+                        style={{
+                          fontSize: '19px',
+                          fontWeight: 800,
+                          color: '#183655'
+                        }}
+                      >
+                        {formatMoney(currentPrice)}
+                      </span>
+
+                      <span
+                        style={{
+                          backgroundColor: '#eafbf1',
+                          color: '#15803d',
+                          fontWeight: 750,
+                          fontSize: '10.5px',
+                          letterSpacing: '0.6px',
+                          padding: '3px 8px',
+                          borderRadius: '5px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          border: '1px solid #bbf7d0',
+                          textTransform: 'uppercase'
+                        }}
+                      >
+                        {lang === 'es' ? 'GARANTIZADO' : 'GUARANTEED'}
+                      </span>
+                    </div>
+
+                    {/* Editable Price UI when casket is selected */}
+                    {isSelected && (
+                      <div
+                        style={{
+                          padding: '8px 10px',
+                          backgroundColor: '#f8fafc',
+                          border: casket.isFixedPrice ? '1px solid #e2e8f0' : '1.5px solid #3b82f6',
+                          borderRadius: '8px',
+                          marginTop: '6px'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <label style={{ fontSize: '11px', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>
+                            {lang === 'es' ? 'Precio Cotizado ($):' : 'Quoted Price ($):'}
+                          </label>
+                          {casket.isFixedPrice ? (
+                            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                              🔒 {lang === 'es' ? 'Precio Fijo' : 'Fixed Price'}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>
+                              ✏️ {lang === 'es' ? 'Editable' : 'Editable'}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontWeight: 700, color: '#475569', fontSize: '14px' }}>$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            readOnly={Boolean(casket.isFixedPrice)}
+                            value={customPrices[casketKey] !== undefined ? customPrices[casketKey] : currentPrice}
+                            onChange={(e) => handlePriceChange(casket, e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '5px 8px',
+                              fontSize: '14px',
+                              fontWeight: 700,
+                              color: casket.isFixedPrice ? '#64748b' : '#0f172a',
+                              backgroundColor: casket.isFixedPrice ? '#f1f5f9' : '#ffffff',
+                              border: casket.isFixedPrice ? '1px solid #cbd5e1' : '1px solid #93c5fd',
+                              borderRadius: '6px',
+                              cursor: casket.isFixedPrice ? 'not-allowed' : 'text'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Zoom & Inspect Button */}
