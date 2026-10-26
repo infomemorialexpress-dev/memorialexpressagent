@@ -5,6 +5,7 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import InputField from '../common/InputField.jsx';
+import api from '../../services/api.js';
 
 export default function LegalDocuments({ onBack, onContinue }) {
   const { t } = useTranslation();
@@ -12,19 +13,49 @@ export default function LegalDocuments({ onBack, onContinue }) {
 
   const isEs = lang === 'es';
 
+  // Live forms fetched from backend
+  const [liveForms, setLiveForms] = useState([]);
+
   // Resolve active funeral home
+  const targetHomeId = String(quote.homeId || quote.home || '').toLowerCase();
   const activeHome =
-    funeralHomes.find(
-      (h) =>
-        (h._id && (h._id === quote.homeId || h._id === quote.home)) ||
-        (h.id && (h.id === quote.homeId || h.id === quote.home)) ||
-        (h.name && quote.home && h.name.toLowerCase() === quote.home.toLowerCase())
-    ) ||
+    funeralHomes.find((h) => {
+      const hId = String(h._id || h.id || '').toLowerCase();
+      const hName = String(h.name || '').toLowerCase();
+      const qHomeName = String(quote.homeName || quote.home || '').toLowerCase();
+      return (
+        (hId && targetHomeId && hId === targetHomeId) ||
+        (hName && qHomeName && hName === qHomeName)
+      );
+    }) ||
     quote.selectedHomeObj ||
     null;
 
-  // Custom forms from funeral home
-  const customForms = Array.isArray(activeHome?.customForms) ? activeHome.customForms : [];
+  const resolvedHomeId = activeHome?._id || activeHome?.id || quote.homeId || quote.home;
+
+  // Fetch live custom forms directly for this funeral home if available
+  useEffect(() => {
+    let isMounted = true;
+    if (resolvedHomeId) {
+      api
+        .get(`/funeral-homes/${resolvedHomeId}/custom-forms`)
+        .then((res) => {
+          if (isMounted && Array.isArray(res.data) && res.data.length > 0) {
+            setLiveForms(res.data);
+          }
+        })
+        .catch(() => {
+          // If dedicated endpoint is not reachable, fallback quietly to home's embedded forms
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [resolvedHomeId]);
+
+  // Merge live custom forms and activeHome.customForms
+  const baseCustomForms = Array.isArray(activeHome?.customForms) ? activeHome.customForms : [];
+  const customForms = liveForms.length > 0 ? liveForms : baseCustomForms;
 
   // If no custom forms uploaded yet, provide standard release forms
   const availableForms =
@@ -50,6 +81,23 @@ export default function LegalDocuments({ onBack, onContinue }) {
         ];
 
   const [selectedForm, setSelectedForm] = useState(availableForms[0] || null);
+
+  // Automatically sync selectedForm if forms change asynchronously
+  useEffect(() => {
+    if (availableForms.length > 0) {
+      const stillValid =
+        selectedForm &&
+        availableForms.some(
+          (f) =>
+            (f.id && f.id === selectedForm.id) ||
+            (f._id && f._id === selectedForm._id) ||
+            f.formTitle === selectedForm.formTitle
+        );
+      if (!stillValid) {
+        setSelectedForm(availableForms[0]);
+      }
+    }
+  }, [availableForms, selectedForm]);
 
   // Form inputs
   const [signerName, setSignerName] = useState('');
