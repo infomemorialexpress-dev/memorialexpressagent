@@ -21,9 +21,13 @@ export default function SelectService({ onBack, onContinue }) {
   const [services, setServices] = useState([]);
   const [isSyncing, setIsSyncing] = useState(true);
   const [error, setError] = useState(null);
-  const [localSelectedService, setLocalSelectedService] = useState(
-    selectedService || quote.selectedServiceObject || null
-  );
+  const [localSelectedService, setLocalSelectedService] = useState(() => {
+    const sel = selectedService || quote.selectedServiceObject;
+    if (sel && typeof sel === 'object' && (sel._id || sel.id || sel.name)) {
+      return sel;
+    }
+    return null;
+  });
 
   // Retrieve funeralHomeId from QuoteContext (saved in Step 1)
   const funeralHomeId =
@@ -125,8 +129,10 @@ export default function SelectService({ onBack, onContinue }) {
           setServices(finalServices);
           // If already selected, reconcile with fetched object
           if (localSelectedService) {
-            const found = finalServices.find(
-              s => (s._id === localSelectedService._id || s.name === localSelectedService.name)
+            const found = finalServices.find(s =>
+              (localSelectedService._id && s._id && s._id === localSelectedService._id) ||
+              (localSelectedService.id && s.id && s.id === localSelectedService.id) ||
+              (localSelectedService.name && s.name && s.name.trim().toLowerCase() === localSelectedService.name.trim().toLowerCase())
             );
             if (found) {
               setLocalSelectedService(found);
@@ -255,11 +261,13 @@ export default function SelectService({ onBack, onContinue }) {
           className="choices-grid"
         >
           {services.map((svc) => {
-            const isSelected =
-              localSelectedService &&
-              (localSelectedService._id === svc._id ||
-                localSelectedService.id === svc.id ||
-                localSelectedService.name === svc.name);
+            const isSelected = Boolean(
+              localSelectedService && (
+                (localSelectedService._id && svc._id && localSelectedService._id === svc._id) ||
+                (localSelectedService.id && svc.id && localSelectedService.id === svc.id) ||
+                (localSelectedService.name && svc.name && localSelectedService.name.trim().toLowerCase() === svc.name.trim().toLowerCase())
+              )
+            );
 
             const subtitleText =
               svc.specifications || svc.category || 'Traditional visitation & funeral service';

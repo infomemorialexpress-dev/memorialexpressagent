@@ -30,9 +30,13 @@ export default function ChooseCasket({ onBack, onContinue }) {
   const [caskets, setCaskets] = useState([]);
   const [isSyncing, setIsSyncing] = useState(true);
   const [error, setError] = useState(null);
-  const [localSelectedCasket, setLocalSelectedCasket] = useState(
-    selectedCasket || quote.selectedCasketObject || null
-  );
+  const [localSelectedCasket, setLocalSelectedCasket] = useState(() => {
+    const sel = selectedCasket || quote.selectedCasketObject;
+    if (sel && typeof sel === 'object' && (sel._id || sel.id || sel.name || sel.productCode)) {
+      return sel;
+    }
+    return null;
+  });
   const [customPrices, setCustomPrices] = useState({});
 
   // Zoom modal state with pan & directional navigation
@@ -203,11 +207,11 @@ export default function ChooseCasket({ onBack, onContinue }) {
 
           // Reconcile current selection if already in state
           if (localSelectedCasket) {
-            const found = unique.find(
-              c =>
-                c._id === localSelectedCasket._id ||
-                c.id === localSelectedCasket.id ||
-                c.name === localSelectedCasket.name
+            const found = unique.find(c =>
+              (localSelectedCasket._id && c._id && c._id === localSelectedCasket._id) ||
+              (localSelectedCasket.id && c.id && c.id === localSelectedCasket.id) ||
+              (localSelectedCasket.productCode && c.productCode && c.productCode === localSelectedCasket.productCode) ||
+              (localSelectedCasket.name && c.name && c.name.trim().toLowerCase() === localSelectedCasket.name.trim().toLowerCase())
             );
             if (found) {
               setLocalSelectedCasket(found);
@@ -369,12 +373,14 @@ export default function ChooseCasket({ onBack, onContinue }) {
           className="casket-cards-grid"
         >
           {caskets.map((casket) => {
-            const casketKey = casket._id || casket.id || casket.productCode || casket.name;
-            const isSelected =
-              localSelectedCasket &&
-              (localSelectedCasket._id === casket._id ||
-                localSelectedCasket.id === casket.id ||
-                localSelectedCasket.name === casket.name);
+            const isSelected = Boolean(
+              localSelectedCasket && (
+                (localSelectedCasket._id && casket._id && localSelectedCasket._id === casket._id) ||
+                (localSelectedCasket.id && casket.id && localSelectedCasket.id === casket.id) ||
+                (localSelectedCasket.productCode && casket.productCode && localSelectedCasket.productCode === casket.productCode) ||
+                (localSelectedCasket.name && casket.name && localSelectedCasket.name.trim().toLowerCase() === casket.name.trim().toLowerCase())
+              )
+            );
 
             const isHovered = hoveredCardId === casketKey;
             const imageUrl = casket.imageUrl || casket.image || '';
