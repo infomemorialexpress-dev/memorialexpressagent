@@ -373,6 +373,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
           className="casket-cards-grid"
         >
           {caskets.map((casket) => {
+            const casketKey = casket._id || casket.id || casket.productCode || casket.name;
             const isSelected = Boolean(
               localSelectedCasket && (
                 (localSelectedCasket._id && casket._id && localSelectedCasket._id === casket._id) ||
