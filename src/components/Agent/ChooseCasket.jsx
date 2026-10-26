@@ -262,10 +262,8 @@ export default function ChooseCasket({ onBack, onContinue }) {
 
   const handleContinue = () => {
     if (!localSelectedCasket) {
-      addToast(
-        lang === 'es' ? 'Por favor seleccione un ataúd para continuar.' : 'Please select a casket to continue.',
-        'error'
-      );
+      selectCasket(null);
+      onContinue();
       return;
     }
 
@@ -278,8 +276,6 @@ export default function ChooseCasket({ onBack, onContinue }) {
     updatePriceOverride(casketKey, activePrice);
     onContinue();
   };
-
-  const isContinueDisabled = !localSelectedCasket;
 
   return (
     <div>
@@ -714,7 +710,6 @@ export default function ChooseCasket({ onBack, onContinue }) {
           variant="primary"
           size="lg"
           onClick={handleContinue}
-          disabled={isContinueDisabled}
           style={{
             backgroundColor: '#183655',
             borderColor: '#183655',
@@ -722,11 +717,12 @@ export default function ChooseCasket({ onBack, onContinue }) {
             fontSize: '15px',
             fontWeight: 700,
             borderRadius: '10px',
-            opacity: isContinueDisabled ? 0.45 : 1,
-            cursor: isContinueDisabled ? 'not-allowed' : 'pointer'
+            cursor: 'pointer'
           }}
         >
-          {lang === 'es' ? 'Continuar →' : 'Continue →'}
+          {localSelectedCasket
+            ? (lang === 'es' ? 'Continuar con ataúd seleccionado →' : 'Continue with Selected Casket →')
+            : (lang === 'es' ? 'Continuar sin ataúd →' : 'Continue without Casket →')}
         </Button>
       </div>
 

@@ -16,10 +16,7 @@ import SelectDropdown from '../../components/common/SelectDropdown.jsx';
 import {
   SERVICES,
   formatMoney,
-  isCasketNeeded,
-  isDirectCremation,
-  isShipOut,
-  isEligibleCasket
+  isShipOut
 } from '../../utils/quoteLogic.js';
 
 export default function AgentQuoteFunnel() {
@@ -53,30 +50,11 @@ export default function AgentQuoteFunnel() {
     t('steps.legal_documents', lang === 'es' ? 'Documentos Legales' : 'Legal Documents')
   ];
 
-  // Eligible caskets strictly mapped to selected Funeral Home and Service Package
-  const allCaskets = db.caskets || [];
-  const eligibleCaskets = allCaskets.filter(c =>
-    isEligibleCasket(c, quote.home || quote.homeId, quote.service, db, quote.selectedServiceObject)
-  );
-
-  const shouldSkipCasketStep = () => {
-    if (isDirectCremation(quote.service, quote.selectedServiceObject)) return true;
-    if (!isCasketNeeded(quote.service)) return true;
-    if (eligibleCaskets.length === 0) return true;
-    return false;
-  };
-
   // Navigation handlers
   const canContinue = () => {
     if (step === 0) return Boolean(quote.home);
     if (step === 1) return Boolean(quote.home);
     if (step === 2) return Boolean(quote.service);
-    if (step === 3) {
-      if (!shouldSkipCasketStep() && isCasketNeeded(quote.service)) {
-        return Boolean(quote.casket);
-      }
-      return true;
-    }
     return true;
   };
 
@@ -92,33 +70,16 @@ export default function AgentQuoteFunnel() {
       return;
     }
 
-    // Skip casket step if direct cremation, not needed, or no mapped caskets
-    if (step === 2 && shouldSkipCasketStep()) {
-      setStep(4);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
     setStep(Math.min(6, step + 1));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleBack = () => {
-    // If going back from addons and casket step was skipped, return directly to service
-    if (step === 4 && shouldSkipCasketStep()) {
-      setStep(2);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
     setStep(Math.max(0, step - 1));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleStepClick = (target) => {
-    if (target === 3 && shouldSkipCasketStep()) {
-      setStep(4);
-      return;
-    }
     setStep(target);
   };
 
@@ -162,13 +123,13 @@ export default function AgentQuoteFunnel() {
         {/* STEP 2: SELECT SERVICE */}
         {step === 2 && (
           <SelectService
-            onBack={() => setStep(1)}
+            onBack={() => {
+              setStep(1);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
             onContinue={() => {
-              if (shouldSkipCasketStep()) {
-                setStep(4);
-              } else {
-                setStep(3);
-              }
+              setStep(3);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
         )}
@@ -176,8 +137,14 @@ export default function AgentQuoteFunnel() {
         {/* STEP 3: CHOOSE CASKET */}
         {step === 3 && (
           <ChooseCasket
-            onBack={() => setStep(2)}
-            onContinue={() => setStep(4)}
+            onBack={() => {
+              setStep(2);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onContinue={() => {
+              setStep(4);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           />
         )}
 

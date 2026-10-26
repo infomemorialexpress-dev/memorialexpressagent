@@ -10,18 +10,18 @@ import ShimmerImage from '../common/ShimmerImage.jsx';
 
 // Resolve appropriate logo or image asset for each funeral home
 function getHomeLogoSrc(home) {
+  // 1. Prioritize actual funeral home photo from database (matches Step 2)
+  if (home.imageUrl || home.image) return home.imageUrl || home.image;
   if (home.logoUrl) return home.logoUrl;
+
+  // 2. Fallbacks for named locations if no photo is configured
   const name = (home.name || '').toLowerCase();
   const id = String(home.id || home._id || '').toLowerCase();
   if (name.includes('optima') || id.includes('optima')) return LOGOS.OPTIMA_LOGO;
   if (name.includes('western') || id.includes('western')) return LOGOS.WESTERN_LOGO;
   if (name.includes('felipe') || name.includes('bagues') || id.includes('felipe')) return LOGOS.FELIPE_LOGO;
   if (name.includes('murillo') || id.includes('murillo')) return LOGOS.MURILLO_LOGO;
-  return (
-    home.imageUrl ||
-    home.image ||
-    'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=400&q=80'
-  );
+  return 'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=400&q=80';
 }
 
 // Compute starting "From $X.XX" base price strictly from MongoDB packages or return null
@@ -420,7 +420,7 @@ export default function LocationSearch({ onContinue }) {
                       alt={home.name}
                       width="100%"
                       height="100%"
-                      objectFit="contain"
+                      objectFit="cover"
                       fallbackSrc="https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=400&q=80"
                     />
                   </div>
