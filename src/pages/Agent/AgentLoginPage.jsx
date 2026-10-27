@@ -6,6 +6,7 @@ import { BrandFeatherIcon } from '../../components/common/Header.jsx';
 import LoadingSpinner from '../../components/common/LoadingSpinner.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useQuote } from '../../context/QuoteContext.jsx';
+import AgentRegistrationModal from '../../components/Agent/AgentRegistrationModal.jsx';
 
 export default function AgentLoginPage() {
   const [email, setEmail] = useState('');
@@ -13,6 +14,7 @@ export default function AgentLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
 
   const { login, isAuthenticated, isLoading } = useAuth();
   const { addToast } = useQuote();
@@ -339,8 +341,65 @@ export default function AgentLoginPage() {
               {isSubmitting ? 'Signing In...' : 'Sign In'}
             </Button>
           </form>
+
+          {/* Divider */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              margin: '22px 0 16px 0',
+              gap: '12px',
+            }}
+          >
+            <div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }} />
+            <span
+              style={{
+                fontSize: '11.5px',
+                color: '#8c9ba5',
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+              }}
+            >
+              New Sales Representative?
+            </span>
+            <div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }} />
+          </div>
+
+          {/* Register as Agent Button */}
+          <Button
+            variant="secondary"
+            size="lg"
+            type="button"
+            id="register-agent-btn"
+            onClick={() => setIsRegisterOpen(true)}
+            disabled={isSubmitting}
+            style={{
+              width: '100%',
+              justifyContent: 'center',
+              padding: '12px 20px',
+              fontSize: '14.5px',
+              fontWeight: 650,
+              borderRadius: '10px',
+              border: '1.5px solid #183655',
+              color: '#183655',
+              backgroundColor: '#ffffff',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            Register as Agent
+          </Button>
         </div>
       </div>
+
+      {/* Registration Modal */}
+      <AgentRegistrationModal
+        isOpen={isRegisterOpen}
+        onClose={() => setIsRegisterOpen(false)}
+        onSuccess={(msg) => {
+          addToast(msg || 'Registration successful. Please wait for Admin approval.', 'success');
+        }}
+      />
     </div>
   );
 }
