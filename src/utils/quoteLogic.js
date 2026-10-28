@@ -206,23 +206,31 @@ export function casketMatchesPackage(casket, service, selectedServiceObject = nu
   const pkgName = String(selectedServiceObject?.packageName || selectedServiceObject?.name || '').toLowerCase();
   const cat = String(selectedServiceObject?.category || '').toLowerCase();
 
-  return pkgs.some(p => {
+  // If no service selected yet, show all
+  if (!s && !pkgName && !cat) return true;
+
+  const hasMatch = pkgs.some(p => {
     if (!p) return false;
     const pLower = String(p).toLowerCase().trim();
 
     if (pLower === s || pLower === pkgName || pLower === cat) return true;
     if (pkgName && (pkgName.includes(pLower) || pLower.includes(pkgName))) return true;
 
-    if (pLower.includes('two') && (s === 'two_day' || pkgName.includes('two') || pkgName.includes('2 day'))) return true;
-    if (pLower.includes('one') && (s === 'one_day' || pkgName.includes('one') || pkgName.includes('1 day'))) return true;
-    if (pLower.includes('traditional cremation') && (s === 'traditional_cremation' || pkgName.includes('traditional cremation'))) return true;
-    if (pLower.includes('memorial cremation') && (s === 'memorial_cremation' || pkgName.includes('memorial cremation'))) return true;
-    if (pLower.includes('direct cremation') && (s === 'direct_cremation' || pkgName.includes('direct cremation'))) return true;
+    if (pLower.includes('two') && (s.includes('two') || pkgName.includes('two') || pkgName.includes('2'))) return true;
+    if (pLower.includes('one') && (s.includes('one') || pkgName.includes('one') || pkgName.includes('1'))) return true;
+    if (pLower.includes('traditional cremation') && (s.includes('traditional_cremation') || pkgName.includes('traditional cremation'))) return true;
+    if (pLower.includes('memorial cremation') && (s.includes('memorial_cremation') || pkgName.includes('memorial cremation'))) return true;
+    if (pLower.includes('direct cremation') && (s.includes('direct_cremation') || pkgName.includes('direct cremation'))) return true;
     if ((pLower.includes('ship') || pLower.includes('forwarding')) && (isShipOut(s) || pkgName.includes('ship'))) return true;
-    if (pLower.includes('traditional') && !pLower.includes('cremat') && (cat === 'traditional' || s === 'one_day' || s === 'two_day')) return true;
+    if (pLower.includes('traditional') && !pLower.includes('cremat') && (cat.includes('traditional') || s.includes('one') || s.includes('two'))) return true;
 
     return false;
   });
+
+  if (hasMatch) return true;
+
+  // Ensure all caskets assigned to the funeral home are available for traditional/burial/ship-out packages
+  return isCasketNeeded(selectedServiceObject || service);
 }
 
 // Check casket eligibility strictly mapped to funeral home and package
@@ -257,6 +265,11 @@ export function isEligibleCasket(casket, homeId, service, db = null, selectedSer
     } else {
       matchesHome = casket.home === 'optima' || casket.home === '*' || !casket.home || String(casket.home) === String(homeId);
     }
+  }
+
+  // If fetched directly from the location catalog endpoint, ensure it is considered matched
+  if (!matchesHome && (!casket.funeralHomeId || String(casket.home) === String(homeId))) {
+    matchesHome = true;
   }
 
   if (!matchesHome) return false;

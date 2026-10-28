@@ -187,11 +187,11 @@ export default function ChooseCasket({ onBack, onContinue }) {
           isEligibleCasket(c, funeralHomeId || quote.home, quote.service, null, quote.selectedServiceObject)
         );
 
-        // Deduplicate and canonicalize
+        // Deduplicate by item ID or distinct attributes (prevents discarding distinct casket models sharing family names)
         const unique = [];
         const seen = new Set();
         for (const item of eligible) {
-          const key = (item.name || '').trim().toLowerCase();
+          const key = String(item._id || item.id || `${item.name}-${item.specifications}-${item.price}`).trim();
           if (key && !seen.has(key)) {
             seen.add(key);
             unique.push(item);
