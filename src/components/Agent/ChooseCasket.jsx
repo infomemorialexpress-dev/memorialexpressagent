@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
-import { formatMoney, isEligibleCasket } from '../../utils/quoteLogic.js';
+import { formatMoney, isEligibleCasket, getLocalizedText } from '../../utils/quoteLogic.js';
 import { CasketCardSkeleton } from '../common/SkeletonLoader.jsx';
 import ShimmerImage from '../common/ShimmerImage.jsx';
 
@@ -167,6 +167,10 @@ export default function ChooseCasket({ onBack, onContinue }) {
             _id: item._id || item.id,
             id: item._id || item.id,
             name: item.name,
+            itemName: item.itemName || item.name,
+            itemName_es: item.itemName_es || item.name_es || '',
+            name_es: item.itemName_es || item.name_es || '',
+            category_es: item.category_es || '',
             listPrice: Number(item.listPrice || item.price || 0),
             price: Number(item.listPrice || item.price || 0),
             imageUrl: item.imageUrl || item.image || '',
@@ -493,7 +497,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
                       marginBottom: '8px'
                     }}
                   >
-                    {casket.name}
+                    {getLocalizedText(casket, 'name', lang) || casket.name}
                   </div>
 
                   {/* Specifications as bullet points */}
@@ -773,7 +777,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
                   fontWeight: 700
                 }}
               >
-                {zoomModalCasket.name}
+                {getLocalizedText(zoomModalCasket, 'name', lang) || zoomModalCasket.name}
               </h3>
               <button
                 type="button"

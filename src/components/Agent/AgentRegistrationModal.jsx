@@ -9,8 +9,8 @@ export default function AgentRegistrationModal({ isOpen, onClose, onSuccess }) {
     email: '',
     password: '',
     phone: '',
-    licenseId: '',
-    territory: '',
+    agentCode: '',
+    uplineName: '',
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -31,8 +31,8 @@ export default function AgentRegistrationModal({ isOpen, onClose, onSuccess }) {
       email: '',
       password: '',
       phone: '',
-      licenseId: '',
-      territory: '',
+      agentCode: '',
+      uplineName: '',
     });
     setFormError('');
     setIsSuccess(false);
@@ -52,8 +52,8 @@ export default function AgentRegistrationModal({ isOpen, onClose, onSuccess }) {
     const emailTrim = formData.email.trim();
     const passwordTrim = formData.password.trim();
     const phoneTrim = formData.phone.trim();
-    const licenseIdTrim = formData.licenseId.trim();
-    const territoryTrim = formData.territory.trim();
+    const agentCodeTrim = formData.agentCode.trim();
+    const uplineNameTrim = formData.uplineName.trim();
 
     if (!fullNameTrim) {
       setFormError('Please enter your full legal name.');
@@ -80,13 +80,8 @@ export default function AgentRegistrationModal({ isOpen, onClose, onSuccess }) {
       return;
     }
 
-    if (!licenseIdTrim) {
-      setFormError('Please enter your Agent License ID.');
-      return;
-    }
-
-    if (!territoryTrim) {
-      setFormError('Please enter your sales territory or region.');
+    if (!agentCodeTrim) {
+      setFormError('Please enter your Agent Code.');
       return;
     }
 
@@ -97,8 +92,8 @@ export default function AgentRegistrationModal({ isOpen, onClose, onSuccess }) {
         email: emailTrim.toLowerCase(),
         password: passwordTrim,
         phone: phoneTrim,
-        licenseId: licenseIdTrim,
-        territory: territoryTrim,
+        agentCode: agentCodeTrim,
+        uplineName: uplineNameTrim,
       };
 
       const res = await api.post('/agents/register', payload);
@@ -313,10 +308,10 @@ export default function AgentRegistrationModal({ isOpen, onClose, onSuccess }) {
                   <span style={{ fontWeight: 600 }}>{formData.fullName}</span>
                   <span style={{ color: '#64748b' }}>Email:</span>
                   <span>{formData.email}</span>
-                  <span style={{ color: '#64748b' }}>License ID:</span>
-                  <span>{formData.licenseId}</span>
-                  <span style={{ color: '#64748b' }}>Territory:</span>
-                  <span>{formData.territory}</span>
+                  <span style={{ color: '#64748b' }}>Agent Code:</span>
+                  <span>{formData.agentCode}</span>
+                  <span style={{ color: '#64748b' }}>Upline's Name:</span>
+                  <span>{formData.uplineName || 'None'}</span>
                 </div>
               </div>
 
@@ -450,7 +445,7 @@ export default function AgentRegistrationModal({ isOpen, onClose, onSuccess }) {
                 </button>
               </div>
 
-              {/* Phone Number & License ID Row */}
+              {/* Phone Number & Agent Code Row */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <InputField
                   id="reg-agent-phone"
@@ -464,29 +459,28 @@ export default function AgentRegistrationModal({ isOpen, onClose, onSuccess }) {
                 />
 
                 <InputField
-                  id="reg-agent-license"
-                  name="licenseId"
+                  id="reg-agent-code"
+                  name="agentCode"
                   type="text"
-                  label="Agent License ID"
+                  label="Agent Code"
                   placeholder="CA-FD-98421"
-                  value={formData.licenseId}
-                  onChange={(e) => handleChange('licenseId', e.target.value)}
+                  value={formData.agentCode}
+                  onChange={(e) => handleChange('agentCode', e.target.value)}
                   disabled={isSubmitting}
                   required
                 />
               </div>
 
-              {/* Territory */}
+              {/* Upline's Name */}
               <InputField
-                id="reg-agent-territory"
-                name="territory"
+                id="reg-agent-upline"
+                name="uplineName"
                 type="text"
-                label="Territory / Region"
-                placeholder="e.g. East Los Angeles & Montebello"
-                value={formData.territory}
-                onChange={(e) => handleChange('territory', e.target.value)}
+                label="Upline's Name"
+                placeholder="e.g. Patricia Davis / Regional Director"
+                value={formData.uplineName}
+                onChange={(e) => handleChange('uplineName', e.target.value)}
                 disabled={isSubmitting}
-                required
               />
 
               {/* Submit Buttons */}

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
-import { formatMoney } from '../../utils/quoteLogic.js';
+import { formatMoney, getLocalizedText } from '../../utils/quoteLogic.js';
 import { ServiceCardSkeleton } from '../common/SkeletonLoader.jsx';
 
 export default function SelectService({ onBack, onContinue }) {
@@ -82,10 +82,14 @@ export default function SelectService({ onBack, onContinue }) {
           if (existingIdx >= 0) {
             combined[existingIdx] = {
               ...combined[existingIdx],
+              packageName_es: hp.packageName_es || hp.name_es || combined[existingIdx].packageName_es || '',
+              name_es: hp.packageName_es || hp.name_es || combined[existingIdx].name_es || '',
+              category_es: hp.category_es || combined[existingIdx].category_es || '',
               section1Price: hp.section1Price !== undefined ? Number(hp.section1Price) : combined[existingIdx].section1Price,
               section2Price: hp.section2Price !== undefined ? Number(hp.section2Price) : combined[existingIdx].section2Price,
               category: hp.category || combined[existingIdx].category,
               itemizedServices: hp.itemizedServices || combined[existingIdx].itemizedServices,
+              displayOrder: hp.displayOrder !== undefined ? Number(hp.displayOrder) : (combined[existingIdx].displayOrder !== undefined ? Number(combined[existingIdx].displayOrder) : 0),
             };
           } else {
             combined.push({
@@ -93,9 +97,13 @@ export default function SelectService({ onBack, onContinue }) {
               id: hpId,
               name: hpName,
               packageName: hpName,
+              packageName_es: hp.packageName_es || hp.name_es || '',
+              name_es: hp.packageName_es || hp.name_es || '',
               category: hp.category || 'Traditional',
+              category_es: hp.category_es || '',
               section1Price: Number(hp.section1Price) || 0,
               section2Price: Number(hp.section2Price) || 0,
+              displayOrder: hp.displayOrder !== undefined ? Number(hp.displayOrder) : 0,
               isCustom: true,
             });
           }
@@ -114,8 +122,13 @@ export default function SelectService({ onBack, onContinue }) {
           }
         }
 
-        // Sort: standard canonical services first by weight, then custom packages
+        // Sort: by custom displayOrder ascending, fallback to standard canonical service weights
         unique.sort((a, b) => {
+          const orderA = a.displayOrder !== undefined && a.displayOrder !== null ? Number(a.displayOrder) : 0;
+          const orderB = b.displayOrder !== undefined && b.displayOrder !== null ? Number(b.displayOrder) : 0;
+          if (orderA !== orderB) {
+            return orderA - orderB;
+          }
           const nameA = (a.name || a.packageName || '').toLowerCase();
           const nameB = (b.name || b.packageName || '').toLowerCase();
           const wA = orderWeights[nameA] || (a.isCustom ? 100 : 50);
@@ -269,8 +282,10 @@ export default function SelectService({ onBack, onContinue }) {
               )
             );
 
+            const localizedPackageName = getLocalizedText(svc, 'packageName', lang) || svc.name;
+            const localizedCategory = getLocalizedText(svc, 'category', lang) || svc.category || 'Traditional';
             const subtitleText =
-              svc.specifications || svc.category || 'Traditional visitation & funeral service';
+              svc.specifications || localizedCategory || (lang === 'es' ? 'Velación y servicio funerario tradicional' : 'Traditional visitation & funeral service');
 
             return (
               <div
@@ -324,7 +339,7 @@ export default function SelectService({ onBack, onContinue }) {
                       lineHeight: 1.3,
                     }}
                   >
-                    {svc.name}
+                    {localizedPackageName}
                   </strong>
 
                   {isSelected && (
@@ -389,7 +404,7 @@ export default function SelectService({ onBack, onContinue }) {
                         : '#1d4ed8',
                     }}
                   >
-                    {svc.category || 'Traditional'}
+                    {localizedCategory}
                   </span>
 
                   {(Number(svc.section1Price) > 0 || Number(svc.section2Price) > 0) && (

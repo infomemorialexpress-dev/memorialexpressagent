@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
@@ -6,7 +6,17 @@ import ShimmerImage from '../common/ShimmerImage.jsx';
 
 export default function ConfirmHome({ onBack, onContinue }) {
   const { t } = useTranslation();
-  const { lang, selectedFuneralHome, quote, calculation } = useQuote();
+  const {
+    lang,
+    selectedFuneralHome,
+    quote,
+    calculation,
+    selectedChapel,
+    selectChapel,
+    addToast
+  } = useQuote();
+
+  const [validationError, setValidationError] = useState('');
 
   const home = selectedFuneralHome || calculation?.homeObj || quote?.selectedHomeObj || null;
 
@@ -21,8 +31,59 @@ export default function ConfirmHome({ onBack, onContinue }) {
     );
   }
 
-  const chapels = home.chapels || home.locations || [];
-  const locationsCount = chapels.length > 0 ? chapels.length : 1;
+  const rawChapels = home.chapels || home.locations || [];
+  const availableChapels = rawChapels.length > 0
+    ? rawChapels.map((ch, idx) => ({
+        id: ch._id || ch.id || `chapel-${idx}`,
+        name: ch.name || `${ch.city || 'Branch'} Chapel${ch.zip ? ` (${ch.zip})` : ''}`,
+        city: ch.city || home.city || '',
+        zip: ch.zip || '',
+        surcharge: Number(ch.surcharge) || 0
+      }))
+    : [
+        {
+          id: 'main-chapel',
+          name: `${home.name} - Main Facility Chapel`,
+          city: home.city || '',
+          zip: home.zipCode || home.zip || '',
+          surcharge: 0
+        }
+      ];
+
+  const currentSelectedChapel = selectedChapel || quote?.selectedChapel || null;
+
+  const isChapelSelected = (ch) => {
+    if (!currentSelectedChapel) return false;
+    if (currentSelectedChapel.id && ch.id && currentSelectedChapel.id === ch.id) return true;
+    if (currentSelectedChapel.name && ch.name && currentSelectedChapel.name === ch.name) return true;
+    return (
+      currentSelectedChapel.city === ch.city &&
+      (currentSelectedChapel.zip || '') === (ch.zip || '') &&
+      (Number(currentSelectedChapel.surcharge) || 0) === (Number(ch.surcharge) || 0)
+    );
+  };
+
+  const handleChapelSelect = (ch) => {
+    setValidationError('');
+    selectChapel(ch);
+  };
+
+  const handleContinue = () => {
+    if (!currentSelectedChapel) {
+      const msg = lang === 'es'
+        ? 'Por favor seleccione una capilla antes de continuar.'
+        : 'Please select a chapel before proceeding.';
+      setValidationError(msg);
+      if (addToast) addToast(msg, 'error');
+      return;
+    }
+    setValidationError('');
+    if (onContinue) {
+      onContinue();
+    }
+  };
+
+  const locationsCount = rawChapels.length > 0 ? rawChapels.length : 1;
   const taxRate = home.tax !== undefined ? home.tax : 0;
 
   const imageUrl =
@@ -223,56 +284,171 @@ export default function ConfirmHome({ onBack, onContinue }) {
           </div>
         </div>
 
-        {/* Detailed Chapels List Accordion/Display */}
-        {chapels.length > 0 && (
-          <div style={{ marginTop: '20px' }}>
+        {/* Associated Chapels & Service Branches - Selectable Radio Group */}
+        <div style={{ marginTop: '24px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '12px',
+            }}
+          >
             <div
               style={{
-                fontSize: '12px',
+                fontSize: '13px',
                 fontWeight: 700,
-                color: '#67788e',
+                color: '#1e293b',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
-                marginBottom: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
               }}
             >
-              {lang === 'es' ? 'Sucursales y Capillas Asociadas:' : 'Associated Chapels & Service Branches:'}
+              <span>{lang === 'es' ? 'Seleccionar Capilla / Sucursal de Servicio:' : 'Select Chapel / Service Branch:'}</span>
+              <span style={{ color: '#dc2626', fontSize: '14px' }}>*</span>
             </div>
+            {currentSelectedChapel && (
+              <span
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#16a34a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                ✓ {lang === 'es' ? 'Capilla seleccionada' : 'Chapel selected'}
+              </span>
+            )}
+          </div>
+
+          <div
+            role="radiogroup"
+            aria-label="Associated Chapels"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: '12px',
+            }}
+          >
+            {availableChapels.map((chapel, idx) => {
+              const selected = isChapelSelected(chapel);
+              return (
+                <label
+                  key={chapel.id || idx}
+                  onClick={() => handleChapelSelect(chapel)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '14px 16px',
+                    backgroundColor: selected ? '#f0fdf4' : '#ffffff',
+                    border: selected ? '2px solid #16a34a' : '1px solid #cbd5e1',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease-in-out',
+                    boxShadow: selected ? '0 2px 8px rgba(22, 163, 74, 0.15)' : '0 1px 3px rgba(0,0,0,0.02)',
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="selectedChapelGroup"
+                    checked={selected}
+                    onChange={() => handleChapelSelect(chapel)}
+                    style={{
+                      marginTop: '3px',
+                      cursor: 'pointer',
+                      width: '18px',
+                      height: '18px',
+                      accentColor: '#16a34a',
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: '14px',
+                        fontWeight: 700,
+                        color: selected ? '#14532d' : '#1e293b',
+                        marginBottom: '3px',
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {chapel.name}
+                    </div>
+                    {(chapel.city || chapel.zip) && (
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          color: '#64748b',
+                          marginBottom: '6px',
+                        }}
+                      >
+                        📍 {chapel.city} {chapel.zip ? `(${chapel.zip})` : ''}
+                      </div>
+                    )}
+                    <div>
+                      {chapel.surcharge > 0 ? (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            backgroundColor: '#fef2f2',
+                            color: '#b91c1c',
+                            border: '1px solid #fecaca',
+                            borderRadius: '6px',
+                            padding: '2px 8px',
+                            fontSize: '11.5px',
+                            fontWeight: 700,
+                          }}
+                        >
+                          +${chapel.surcharge.toLocaleString()} {lang === 'es' ? 'Recargo' : 'Surcharge'}
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            backgroundColor: '#f1f5f9',
+                            color: '#475569',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            padding: '2px 8px',
+                            fontSize: '11.5px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {lang === 'es' ? 'Sin recargo adicional' : 'Standard Location ($0 Surcharge)'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
+          {validationError && (
             <div
               style={{
+                marginTop: '12px',
+                padding: '10px 14px',
+                backgroundColor: '#fef2f2',
+                border: '1px solid #fca5a5',
+                borderRadius: '8px',
+                color: '#b91c1c',
+                fontSize: '13px',
+                fontWeight: 600,
                 display: 'flex',
-                flexWrap: 'wrap',
+                alignItems: 'center',
                 gap: '8px',
               }}
             >
-              {chapels.map((chapel, idx) => (
-                <span
-                  key={idx}
-                  style={{
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #dbe2ea',
-                    borderRadius: '8px',
-                    padding: '5px 10px',
-                    fontSize: '12px',
-                    color: '#253851',
-                    fontWeight: 500,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                  }}
-                >
-                  <span style={{ color: '#183655', fontWeight: 700 }}>•</span>
-                  {chapel.city} {chapel.zip ? `(${chapel.zip})` : ''}
-                  {chapel.surcharge > 0 && (
-                    <span style={{ color: '#b91c1c', fontWeight: 600, fontSize: '11px' }}>
-                      +${chapel.surcharge}
-                    </span>
-                  )}
-                </span>
-              ))}
+              <span>⚠️</span>
+              <span>{validationError}</span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Navigation Buttons Row (Matches screenshot: Back on left, Continue on right) */}
@@ -306,10 +482,12 @@ export default function ConfirmHome({ onBack, onContinue }) {
         <Button
           variant="primary"
           size="lg"
-          onClick={onContinue}
+          onClick={handleContinue}
+          disabled={!currentSelectedChapel}
           style={{
-            backgroundColor: '#183655',
-            borderColor: '#183655',
+            backgroundColor: currentSelectedChapel ? '#183655' : '#94a3b8',
+            borderColor: currentSelectedChapel ? '#183655' : '#94a3b8',
+            cursor: currentSelectedChapel ? 'pointer' : 'not-allowed',
             padding: '12px 32px',
             fontSize: '15px',
             fontWeight: 700,

@@ -45,6 +45,7 @@ export function QuoteProvider({ children }) {
     shipDestination: 'north_america',
     flowersQty: 1,
     escortQty: 1,
+    selectedChapel: null,
     priceOverrides: {}
   });
 
@@ -148,6 +149,7 @@ export function QuoteProvider({ children }) {
     }
 
     setSelectedFuneralHome(homeObj);
+    setSelectedChapel(null);
 
     setQuote(prev => ({
       ...prev,
@@ -155,11 +157,33 @@ export function QuoteProvider({ children }) {
       homeId: homeId,
       homeName: homeObj?.name || prev.homeName || '',
       selectedHomeObj: homeObj,
+      selectedChapel: null,
       service: '',
       casket: '',
       addons: [],
       urnAllowance: '',
       priceOverrides: {}
+    }));
+  };
+
+  // Selected Chapel State & Action
+  const [selectedChapel, setSelectedChapel] = useState(null);
+
+  const selectChapel = (chapel) => {
+    let chapelObj = null;
+    if (chapel) {
+      const chapelName = chapel.name || (chapel.city ? `${chapel.city} Chapel${chapel.zip ? ` (${chapel.zip})` : ''}` : 'Main Facility Chapel');
+      const surcharge = Number(chapel.surcharge) || 0;
+      chapelObj = {
+        ...chapel,
+        name: chapelName,
+        surcharge
+      };
+    }
+    setSelectedChapel(chapelObj);
+    setQuote(prev => ({
+      ...prev,
+      selectedChapel: chapelObj
     }));
   };
 
@@ -291,6 +315,8 @@ export function QuoteProvider({ children }) {
         selectedService,
         selectService,
         setService,
+        selectedChapel,
+        selectChapel,
         selectedCasket,
         selectCasket,
         toggleAddon,

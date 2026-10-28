@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
-import { formatMoney } from '../../utils/quoteLogic.js';
+import { formatMoney, getLocalizedText } from '../../utils/quoteLogic.js';
 import { AddonRowSkeleton } from '../common/SkeletonLoader.jsx';
 
 export const isGuaranteedAddonItem = (item) => {
@@ -99,6 +99,10 @@ export default function AddonsOptions({ onBack, onContinue }) {
                 id: item._id || item.id,
                 _id: item._id || item.id,
                 name: item.name,
+                itemName: item.itemName || item.name,
+                itemName_es: item.itemName_es || item.name_es || '',
+                name_es: item.itemName_es || item.name_es || '',
+                category_es: item.category_es || '',
                 price: Number(item.listPrice ?? item.price ?? 0),
                 listPrice: Number(item.listPrice ?? item.price ?? 0),
                 category: item.category || item.type || 'Non-Guaranteed',
@@ -338,6 +342,10 @@ export default function AddonsOptions({ onBack, onContinue }) {
       const itemObj = {
         id,
         name: found ? found.name : id,
+        itemName: found ? (found.itemName || found.name) : id,
+        itemName_es: found?.itemName_es || found?.name_es || '',
+        name_es: found?.itemName_es || found?.name_es || '',
+        category_es: found?.category_es || '',
         unitPrice,
         price: totalPrice,
         totalPrice,
@@ -444,7 +452,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px' }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '15.5px', fontWeight: 700, color: '#183655', lineHeight: 1.3 }}>
-                {addon.name}
+                {getLocalizedText(addon, 'itemName', lang) || addon.name}
               </div>
               <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>
                 {addon.specifications || addon.description || 'Automatic airfare for ship-out arrangements.'}
@@ -618,7 +626,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
                   lineHeight: 1.35,
                 }}
               >
-                {addon.name}
+                {getLocalizedText(addon, 'itemName', lang) || addon.name}
               </span>
 
               {/* Mandatory Item Badge */}

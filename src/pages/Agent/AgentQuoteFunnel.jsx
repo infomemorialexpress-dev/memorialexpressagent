@@ -30,6 +30,7 @@ export default function AgentQuoteFunnel() {
     db,
     calculation,
     selectHome,
+    selectedChapel,
     setService,
     selectCasket,
     toggleAddon,
@@ -53,7 +54,7 @@ export default function AgentQuoteFunnel() {
   // Navigation handlers
   const canContinue = () => {
     if (step === 0) return Boolean(quote.home);
-    if (step === 1) return Boolean(quote.home);
+    if (step === 1) return Boolean(quote.home && (quote.selectedChapel || selectedChapel));
     if (step === 2) return Boolean(quote.service);
     return true;
   };

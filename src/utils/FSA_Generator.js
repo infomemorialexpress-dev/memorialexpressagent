@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { formatMoney, getItemizedServicesList, t } from './quoteLogic.js';
+import { formatMoney, getItemizedServicesList, t, getLocalizedText } from './quoteLogic.js';
 
 function getTranslatedServiceTitle(title, isEs) {
   if (!isEs) return title;
@@ -40,10 +40,12 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const borderLight = [203, 213, 225];
 
   // ================= 1. DYNAMIC SECTION I SERVICES =================
+  const selectedChapel = quote?.selectedChapel || calculation?.selectedChapel || null;
   const itemizedBreakdown = getItemizedServicesList(
     quote?.selectedServiceObject || calculation?.serviceObj,
     calculation,
-    isEs
+    isEs,
+    selectedChapel
   );
   const dynamicItemizedServices = itemizedBreakdown.rows;
   const effectiveServicesTotal = itemizedBreakdown.totalServices;
@@ -56,7 +58,8 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   // ================= 2. DYNAMIC (CONTEXT-BASED) ELEMENTS =================
   const homeObj = calculation?.homeObj || quote?.selectedHomeObj || {};
   const serviceKey = quote?.service || 'one_day';
-  const rawServiceTitle = (quote?.serviceName || calculation?.serviceTitle || 'ONE-DAY FUNERAL').toUpperCase();
+  const serviceObj = quote?.selectedServiceObject || calculation?.serviceObj || {};
+  const rawServiceTitle = (getLocalizedText(serviceObj, 'packageName', isEs ? 'es' : 'en') || quote?.serviceName || calculation?.serviceTitle || 'ONE-DAY FUNERAL').toUpperCase();
   const serviceTitle = getTranslatedServiceTitle(rawServiceTitle, isEs);
 
   const isCremation = serviceKey.includes('cremation');
@@ -65,7 +68,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
 
   const casket = calculation?.casket || quote?.casketObj || {};
   const dynamicCasketPrice = Number(casket.price || casket.listPrice || calculation?.s2 || 1690.0);
-  const dynamicCasketName = casket.name || 'Gemini Silver';
+  const dynamicCasketName = getLocalizedText(casket, 'name', isEs ? 'es' : 'en') || casket.name || 'Gemini Silver';
   const dynamicManufacturer = casket.manufacturer || 'Optima catalog';
   const dynamicInterior = isEs ? t(casket.interiorExterior || casket.interior || 'crepe ivory interior', 'es') : (casket.interiorExterior || casket.interior || 'crepe ivory interior');
   const dynamicExterior = casket.exterior || casket.color || '—';
@@ -233,9 +236,11 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
 
   const priceColW = 55;
   const leftTablePriceX = margin + colWidth - priceColW;
-  doc.line(leftTablePriceX, leftY, leftTablePriceX, startGridY + colHeight - 32);
+  const leftBottomY = startGridY + colHeight - 32;
+  doc.line(leftTablePriceX, leftY, leftTablePriceX, leftBottomY);
 
-  const rowHeight = 16.5;
+  const availableRowsH = leftBottomY - leftY;
+  const rowHeight = Math.min(16.5, availableRowsH / Math.max(1, dynamicItemizedServices.length));
   dynamicItemizedServices.forEach((row) => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.8);
@@ -248,7 +253,8 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
       doc.text(`-${formatMoney(Math.abs(row.amount))}`, margin + colWidth - 4, leftY + 11, { align: 'right' });
     } else {
       doc.setTextColor(...black);
-      doc.text(formatMoney(row.amount), margin + colWidth - 4, leftY + 11, { align: 'right' });
+      const text = row.displayAmount || formatMoney(row.amount);
+      doc.text(text, margin + colWidth - 4, leftY + 11, { align: 'right' });
     }
 
     doc.setDrawColor(...borderLight);
@@ -258,7 +264,6 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   });
 
   // Section I Total at bottom of left column
-  const leftBottomY = startGridY + colHeight - 32;
   doc.setDrawColor(...black);
   doc.setLineWidth(1);
   doc.line(margin, leftBottomY, margin + colWidth, leftBottomY);
@@ -336,7 +341,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
 
   const guaranteedMerchRows = guaranteedAddons.length > 0
     ? guaranteedAddons.map(item => {
-        const translatedName = isEs ? t(item.name, 'es') : item.name;
+        const translatedName = isEs ? (getLocalizedText(item, 'name', 'es') || t(item.name, 'es')) : (item.name || '');
         return {
           label: item.quantity > 1 ? `${translatedName} (${item.quantity} × ${formatMoney(item.unitPrice)})` : translatedName,
           val: formatMoney(item.totalPrice ?? item.price),
@@ -464,8 +469,10 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   // Map any other add-ons from active QuoteContext
   if (dynamicSelectedAddons.length > 0) {
     const firstAddon = dynamicSelectedAddons[0];
-    const rawAddonName = typeof firstAddon === 'string' ? firstAddon : (firstAddon.name || 'Add-on Item');
-    const aName = isEs ? t(rawAddonName, 'es') : rawAddonName;
+    const rawAddonName = typeof firstAddon === 'string'
+      ? (isEs ? t(firstAddon, 'es') : firstAddon)
+      : (getLocalizedText(firstAddon, 'name', isEs ? 'es' : 'en') || firstAddon.name || 'Add-on Item');
+    const aName = rawAddonName;
     const aPrice = typeof firstAddon === 'object' && firstAddon.price !== undefined ? Number(firstAddon.price) : 0;
     doc.line(margin, nonGInnerY + 16, margin + nonGColW, nonGInnerY + 16);
     doc.setFont('helvetica', 'normal');

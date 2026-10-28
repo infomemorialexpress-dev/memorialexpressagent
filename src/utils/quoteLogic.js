@@ -17,6 +17,16 @@ export {
 
 // Cash formatting
 export function formatMoney(amount) {
+  if (typeof amount === 'string') {
+    const trimmed = amount.trim();
+    const cleaned = trimmed.replace(/[\$,]/g, '');
+    if (isNaN(Number(cleaned)) || cleaned === '') {
+      if (trimmed.toLowerCase() === 'incl' || trimmed.toLowerCase() === 'included') {
+        return '$ incl';
+      }
+      return trimmed.startsWith('$') ? trimmed : `$ ${trimmed}`;
+    }
+  }
   const num = Number(amount) || 0;
   return '$' + num.toLocaleString('en-US', {
     minimumFractionDigits: num % 1 === 0 ? 0 : 2,
@@ -39,6 +49,51 @@ export function t(text, lang = 'en', directEs = null) {
     }
   }
   return result;
+}
+
+// Database-level Dynamic Content Localization helper (English / Spanish)
+export function getLocalizedText(item, field, currentLang = 'en') {
+  if (!item) return '';
+  if (typeof item === 'string') {
+    return currentLang === 'es' ? t(item, currentLang) : item;
+  }
+
+  const isEs = currentLang === 'es';
+
+  if (isEs) {
+    // 1. Check explicit field_es (e.g. packageName_es, itemName_es, customName_es, category_es)
+    if (field && item[`${field}_es`]) {
+      return item[`${field}_es`];
+    }
+    // 2. Check dynamic translations object if present
+    if (item.translations) {
+      if (field && item.translations[field]?.es) return item.translations[field].es;
+      if (item.translations.es) return item.translations.es;
+    }
+    // 3. Known entity Spanish fields
+    if (field === 'packageName' && (item.packageName_es || item.name_es)) {
+      return item.packageName_es || item.name_es;
+    }
+    if ((field === 'itemName' || field === 'name') && (item.itemName_es || item.name_es)) {
+      return item.itemName_es || item.name_es;
+    }
+    if (field === 'category' && item.category_es) {
+      return item.category_es;
+    }
+    if (item.customName_es) return item.customName_es;
+    if (item.packageName_es) return item.packageName_es;
+    if (item.itemName_es) return item.itemName_es;
+    if (item.name_es) return item.name_es;
+  }
+
+  // Fallback to default English field
+  if (field && item[field]) {
+    const val = item[field];
+    return isEs ? t(val, 'es') : val;
+  }
+
+  const defaultVal = item.packageName || item.itemName || item.name || item.title || item.label || '';
+  return isEs ? t(defaultVal, 'es') : defaultVal;
 }
 
 // Check if service requires a casket
@@ -429,8 +484,9 @@ export function calculateQuote(q, db) {
     : (airTray ? (h === 'felipe' ? 250 : (h === 'western' ? 795 : getItemPrice(airTray))) : felipeAirTray);
 
   // Chapel location surcharge
-  const matchedLoc = getMatchedLocation(homeObj, q.location);
-  const chapelExtra = matchedLoc?.surcharge || 0;
+  const matchedLoc = q.selectedChapel || getMatchedLocation(homeObj, q.location);
+  const selectedChapel = q.selectedChapel || matchedLoc || null;
+  const chapelExtra = Number(selectedChapel?.surcharge) || 0;
 
   // Section 1: Services (Guaranteed)
   const serviceS1 = q.selectedServiceObject?.section1Price ?? p.section1 ?? 0;
@@ -516,6 +572,12 @@ export function calculateQuote(q, db) {
     airTrayPrice,
     westernGuaranteed,
     felipeGuaranteed,
+    selectedChapel,
+    chapelExtra,
+    chapelSurcharge: chapelExtra,
+    visitationHours: q.selectedServiceObject?.visitationHours !== undefined
+      ? Number(q.selectedServiceObject.visitationHours)
+      : (pkgFromDb?.visitationHours ?? 3),
     addedAddons: added
   };
 }
@@ -524,27 +586,69 @@ export function calculateQuote(q, db) {
  * Returns the dynamic 9-item Section 1 Itemized Services breakdown,
  * gross subtotal, package savings, and total services amount.
  */
-export function getItemizedServicesList(packageObj, calculation, isEs = false) {
+export function getItemizedServicesList(packageObj, calculation, isEs = false, selectedChapelArg = null) {
   const itemized =
     packageObj?.itemizedServices ||
     calculation?.packageData?.itemizedServices ||
     calculation?.itemizedServices ||
     {};
 
+  const parseNum = (val) => {
+    if (val === undefined || val === null) return 0;
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    const cleaned = String(val).replace(/[\$,]/g, '').trim();
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  const getDisplayAmount = (val) => {
+    if (val === undefined || val === null || val === '') return null;
+    if (typeof val === 'number') return null;
+    const str = String(val).trim();
+    const cleaned = str.replace(/[\$,]/g, '');
+    if (cleaned !== '' && !isNaN(Number(cleaned))) return null;
+    if (str.toLowerCase() === 'incl' || str.toLowerCase() === 'included') {
+      return '$ incl';
+    }
+    return str.startsWith('$') ? str : `$ ${str}`;
+  };
+
   const hasItemizedValues =
     itemized &&
     typeof itemized === 'object' &&
-    Object.values(itemized).some(v => Number(v) > 0);
+    Object.entries(itemized).some(([k, v]) => {
+      if (k === 'otherServices') return false;
+      if (v === undefined || v === null) return false;
+      const s = String(v).trim();
+      return s !== '' && s !== '0';
+    });
 
-  let arrangements = Number(itemized.arrangements) || 0;
-  let transfer = Number(itemized.transfer) || 0;
-  let embalming = Number(itemized.embalming) || 0;
-  let otherPreparation = Number(itemized.otherPreparation) || 0;
-  let visitation = Number(itemized.visitation) || 0;
-  let funeralService = Number(itemized.funeralService) || 0;
-  let funeralCoach = Number(itemized.funeralCoach) || 0;
-  let utilityVehicles = Number(itemized.utilityVehicles) || 0;
-  let packageSavings = Number(itemized.packageSavings) || 0;
+  const chapel = selectedChapelArg || calculation?.selectedChapel || null;
+  const chapelSurcharge = Number(chapel?.surcharge) || 0;
+
+  const hours = packageObj?.visitationHours !== undefined
+    ? Number(packageObj.visitationHours)
+    : (calculation?.packageData?.visitationHours !== undefined
+      ? Number(calculation.packageData.visitationHours)
+      : (calculation?.serviceObj?.visitationHours !== undefined
+        ? Number(calculation.serviceObj.visitationHours)
+        : (calculation?.visitationHours !== undefined
+          ? Number(calculation.visitationHours)
+          : 3)));
+
+  const visitationDesc = isEs
+    ? `Velación (${hours} horas)`
+    : `Visitation (${hours} hours)`;
+
+  let arrangements = parseNum(itemized.arrangements);
+  let transfer = parseNum(itemized.transfer);
+  let embalming = parseNum(itemized.embalming);
+  let otherPreparation = parseNum(itemized.otherPreparation);
+  let visitation = parseNum(itemized.visitation);
+  let funeralService = parseNum(itemized.funeralService);
+  let funeralCoach = parseNum(itemized.funeralCoach);
+  let utilityVehicles = parseNum(itemized.utilityVehicles);
+  let packageSavings = parseNum(itemized.packageSavings);
 
   const directS1 = Number(
     calculation?.packageData?.section1 ||
@@ -567,6 +671,25 @@ export function getItemizedServicesList(packageObj, calculation, isEs = false) {
     packageSavings = Math.round((gross - targetTotal) * 100) / 100;
   }
 
+  const customOtherRows = Array.isArray(itemized.otherServices)
+    ? itemized.otherServices
+        .filter(o => o && (o.name || o.customName_es || o.name_es) && String(o.name || o.customName_es || o.name_es).trim() !== '')
+        .map((o, idx) => {
+          const rawDesc = isEs
+            ? (o.customName_es || o.name_es || t(o.name, 'es') || o.name)
+            : (o.name || o.customName_es || o.name_es);
+          return {
+            key: `otherService_${idx}`,
+            desc: String(rawDesc).trim(),
+            amount: parseNum(o.price),
+            displayAmount: getDisplayAmount(o.price),
+            rawAmount: o.price
+          };
+        })
+    : [];
+
+  const customOtherTotal = customOtherRows.reduce((sum, r) => sum + r.amount, 0);
+
   const grossTotal =
     arrangements +
     transfer +
@@ -575,19 +698,40 @@ export function getItemizedServicesList(packageObj, calculation, isEs = false) {
     visitation +
     funeralService +
     funeralCoach +
-    utilityVehicles;
+    utilityVehicles +
+    customOtherTotal +
+    chapelSurcharge;
 
   const totalServices = Math.max(0, grossTotal - packageSavings);
 
+  const formatRow = (key, desc, rawVal, defaultAmt) => {
+    const val = rawVal !== undefined ? rawVal : defaultAmt;
+    return {
+      key,
+      desc,
+      amount: parseNum(val),
+      displayAmount: getDisplayAmount(val),
+      rawAmount: val
+    };
+  };
+
   const rows = [
-    { key: 'arrangements', desc: isEs ? 'Arreglos y servicios del personal profesional' : 'Arrangements and professional staff', amount: arrangements },
-    { key: 'transfer', desc: isEs ? 'Traslado del difunto (25 millas)' : 'Transfer (25 miles)', amount: transfer },
-    { key: 'embalming', desc: isEs ? 'Embalsamamiento / refrigeración' : 'Embalming / refrigeration', amount: embalming },
-    { key: 'otherPreparation', desc: isEs ? 'Otra preparación' : 'Other preparation', amount: otherPreparation },
-    { key: 'visitation', desc: isEs ? 'Velación (3 horas)' : 'Visitation (3 hours)', amount: visitation },
-    { key: 'funeralService', desc: isEs ? 'Servicio funerario / memorial' : 'Funeral/memorial service', amount: funeralService },
-    { key: 'funeralCoach', desc: isEs ? 'Carroza funeraria' : 'Funeral coach', amount: funeralCoach },
-    { key: 'utilityVehicles', desc: isEs ? 'Vehículos utilitarios / otros' : 'Utility vehicles / other', amount: utilityVehicles },
+    formatRow('arrangements', isEs ? 'Arreglos y servicios del personal profesional' : 'Arrangements and professional staff', itemized.arrangements, arrangements),
+    formatRow('transfer', isEs ? 'Traslado del difunto (25 millas)' : 'Transfer (25 miles)', itemized.transfer, transfer),
+    formatRow('embalming', isEs ? 'Embalsamamiento / refrigeración' : 'Embalming / refrigeration', itemized.embalming, embalming),
+    formatRow('otherPreparation', isEs ? 'Otra preparación' : 'Other preparation', itemized.otherPreparation, otherPreparation),
+    formatRow('visitation', visitationDesc, itemized.visitation, visitation),
+    formatRow('funeralService', isEs ? 'Servicio funerario / memorial' : 'Funeral/memorial service', itemized.funeralService, funeralService),
+    formatRow('funeralCoach', isEs ? 'Carroza funeraria' : 'Funeral coach', itemized.funeralCoach, funeralCoach),
+    formatRow('utilityVehicles', isEs ? 'Vehículos utilitarios / otros' : 'Utility vehicles / other', itemized.utilityVehicles, utilityVehicles),
+    ...customOtherRows,
+    ...(chapelSurcharge > 0 ? [{
+      key: 'chapelSurcharge',
+      desc: isEs
+        ? `Recargo de Capilla: ${chapel?.name || chapel?.city || 'Capilla Seleccionada'}`
+        : `Chapel Surcharge: ${chapel?.name || chapel?.city || 'Selected Chapel'}`,
+      amount: chapelSurcharge
+    }] : []),
     { key: 'packageSavings', desc: isEs ? 'Ahorro de paquete' : 'Package savings', amount: -Math.abs(packageSavings), isSavings: true },
   ];
 

@@ -91,7 +91,7 @@ export default function Header({ lang, onLanguageToggle }) {
                 {agentUser.fullName || agentUser.email}
               </span>
               <span className="header-user-role">
-                Agent {agentUser.licenseId ? `• ${agentUser.licenseId}` : ''}
+                Agent {(agentUser.agentCode || agentUser.licenseId) ? `• ${agentUser.agentCode || agentUser.licenseId}` : ''}
               </span>
             </div>
 

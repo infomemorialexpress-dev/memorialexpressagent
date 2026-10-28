@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
-import { formatMoney, SERVICES, getItemizedServicesList } from '../../utils/quoteLogic.js';
+import { formatMoney, SERVICES, getItemizedServicesList, getLocalizedText } from '../../utils/quoteLogic.js';
 import { generateFSAPdf } from '../../utils/FSA_Generator.js';
 import { QuoteSummarySkeleton } from '../common/SkeletonLoader.jsx';
 
@@ -37,10 +37,12 @@ export default function QuoteSummary({ onBack, onContinue }) {
   }
 
   // ================= 1. DYNAMIC SECTION I SERVICES =================
+  const selectedChapel = quote.selectedChapel || calculation.selectedChapel || null;
   const itemizedBreakdown = getItemizedServicesList(
     quote.selectedServiceObject || calculation.serviceObj,
     calculation,
-    isEs
+    isEs,
+    selectedChapel
   );
   const dynamicItemizedServices = itemizedBreakdown.rows;
   const effectiveServicesTotal = itemizedBreakdown.totalServices;
@@ -53,8 +55,9 @@ export default function QuoteSummary({ onBack, onContinue }) {
   // ================= 2. DYNAMIC (CONTEXT-BASED) ELEMENTS =================
   const homeObj = calculation.homeObj || quote.selectedHomeObj || {};
   const serviceKey = quote.service || 'one_day';
-  const serviceDisplayName =
-    (quote.serviceName || SERVICES.find(s => s[0] === serviceKey)?.[1] || 'ONE-DAY FUNERAL').toUpperCase();
+  const serviceObj = quote.selectedServiceObject || calculation.serviceObj || {};
+  const rawServiceDisplayName = getLocalizedText(serviceObj, 'packageName', lang) || quote.serviceName || SERVICES.find(s => s[0] === serviceKey)?.[1] || 'ONE-DAY FUNERAL';
+  const serviceDisplayName = rawServiceDisplayName.toUpperCase();
 
   const isCremation = serviceKey.includes('cremation');
   const isShip = serviceKey.includes('ship');
@@ -63,7 +66,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
   // Section II: Dynamic Casket Merchandise Details & Price
   const casket = calculation.casket || quote.casketObj || {};
   const dynamicCasketPrice = Number(casket.price || casket.listPrice || calculation.s2 || 1690.00);
-  const dynamicCasketName = casket.name || 'Gemini Silver';
+  const dynamicCasketName = getLocalizedText(casket, 'name', lang) || casket.name || 'Gemini Silver';
   const dynamicManufacturer = casket.manufacturer || 'Optima catalog';
   const dynamicInterior = casket.interiorExterior || casket.interior || 'crepe ivory interior';
   const dynamicExterior = casket.exterior || casket.color || '—';
@@ -150,6 +153,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
       generateFSAPdf({
         quote: {
           ...quote,
+          selectedChapel,
           guaranteedAddons,
           nonGuaranteedAddons: dynamicSelectedAddons,
           guaranteedAddonsTotal,
@@ -157,7 +161,8 @@ export default function QuoteSummary({ onBack, onContinue }) {
         },
         calculation: {
           ...calculation,
-          s1: STATIC_SERVICES_TOTAL,
+          selectedChapel,
+          s1: effectiveServicesTotal,
           s2: dynamicTotalMerchandise,
           guaranteedAddons,
           guaranteedAddonsTotal,
@@ -358,6 +363,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                 <tbody>
                   {dynamicItemizedServices.map((row, idx) => {
                     const isSavings = row.isSavings || row.amount < 0 || row.key === 'packageSavings';
+                    const displayPrice = row.displayAmount || (isSavings ? `-${formatMoney(Math.abs(row.amount))}` : formatMoney(row.amount));
                     return (
                       <tr key={idx} style={{ borderBottom: '1px solid #cbd5e1' }}>
                         <td style={{ padding: '3.5px 6px', color: '#000000' }}>
@@ -374,7 +380,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                             color: isSavings ? '#b91c1c' : '#000000',
                           }}
                         >
-                          {isSavings ? `-${formatMoney(Math.abs(row.amount))}` : formatMoney(row.amount)}
+                          {displayPrice}
                         </td>
                       </tr>
                     );
@@ -612,7 +618,8 @@ export default function QuoteSummary({ onBack, onContinue }) {
                   </tr>
                   {guaranteedAddons.length > 0 ? (
                     guaranteedAddons.map((item, idx) => {
-                      const iName = item.quantity > 1 ? `${item.name} (${item.quantity} × ${formatMoney(item.unitPrice)})` : item.name;
+                      const baseName = getLocalizedText(item, 'name', lang) || item.name;
+                      const iName = item.quantity > 1 ? `${baseName} (${item.quantity} × ${formatMoney(item.unitPrice)})` : baseName;
                       const iPrice = Number(item.totalPrice ?? item.price ?? 0);
                       return (
                         <tr key={idx} style={{ borderBottom: '1px solid #cbd5e1' }}>
@@ -767,7 +774,9 @@ export default function QuoteSummary({ onBack, onContinue }) {
 
                   {/* Selected Add-ons mapped from QuoteContext */}
                   {dynamicSelectedAddons.map((addon, aIdx) => {
-                    const aName = typeof addon === 'string' ? addon : (addon.name || 'Add-on Item');
+                    const aName = typeof addon === 'string'
+                      ? (isEs ? t(addon) : addon)
+                      : (getLocalizedText(addon, 'name', lang) || addon.name || 'Add-on Item');
                     const aPrice = typeof addon === 'object' && addon.price !== undefined ? addon.price : 0;
                     return (
                       <tr key={aIdx} style={{ borderBottom: '1px solid #cbd5e1' }}>
