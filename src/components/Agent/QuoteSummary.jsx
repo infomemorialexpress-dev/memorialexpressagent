@@ -138,14 +138,32 @@ export default function QuoteSummary({ onBack, onContinue }) {
   const dynamicTotalNonGuaranteed = dynamicAddonsTotal + customItemsTotal + dynamicSalesTax;
   const dynamicGrandTotal = dynamicTotalGuaranteed + dynamicTotalNonGuaranteed;
 
-  // Dynamic Funeral Firm Details
-  const dynamicFirmName = homeObj.name || quote.homeName || 'Felipe Bagues Mortuary — Los Angeles (Funeral Home)';
+  // Dynamic Funeral Firm Details (Checks selectedBranch first, matching FSA_Generator.js)
+  const selectedBranch = quote?.selectedBranch || calculation?.selectedBranch;
+  const dynamicFirmName =
+    selectedBranch?.branchName ||
+    calculation?.firmName ||
+    homeObj.name ||
+    quote.homeName ||
+    'Felipe Bagues Mortuary — Los Angeles (Funeral Home)';
+
+  const branchAddress = selectedBranch
+    ? [selectedBranch.streetAddress, selectedBranch.city].filter(Boolean).join(', ')
+    : '';
+
   const dynamicFirmAddress =
+    branchAddress ||
+    calculation?.firmAddress ||
     homeObj.streetAddress ||
     homeObj.address ||
     calculation.matchedLoc?.address ||
     '1930 E. First Street, Los Angeles, CA 90033';
-  const dynamicFirmPhone = homeObj.phone || '(323) 268-0759';
+
+  const dynamicFirmPhone =
+    selectedBranch?.phone ||
+    calculation?.firmPhone ||
+    homeObj.phone ||
+    '(323) 268-0759';
 
   // Trigger standardized PDF Generation
   const handlePrintSavePdf = async () => {

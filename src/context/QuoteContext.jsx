@@ -50,6 +50,7 @@ export function QuoteProvider({ children }) {
     shipDestination: 'north_america',
     flowersQty: 1,
     escortQty: 1,
+    selectedBranch: null,
     selectedChapel: null,
     priceOverrides: {}
   });
@@ -155,6 +156,7 @@ export function QuoteProvider({ children }) {
 
     setSelectedFuneralHome(homeObj);
     setSelectedChapel(null);
+    setSelectedBranch(null);
 
     setQuote(prev => ({
       ...prev,
@@ -163,6 +165,7 @@ export function QuoteProvider({ children }) {
       homeName: homeObj?.name || prev.homeName || '',
       selectedHomeObj: homeObj,
       selectedChapel: null,
+      selectedBranch: null,
       service: '',
       casket: '',
       addons: [],
@@ -189,6 +192,26 @@ export function QuoteProvider({ children }) {
     setQuote(prev => ({
       ...prev,
       selectedChapel: chapelObj
+    }));
+  };
+
+  // Selected Sub-Location Branch State & Action
+  const [selectedBranch, setSelectedBranch] = useState(null);
+
+  const selectBranch = (branch) => {
+    let branchObj = null;
+    if (branch) {
+      branchObj = {
+        branchName: branch.branchName || branch.name || '',
+        streetAddress: branch.streetAddress || branch.address || '',
+        city: branch.city || '',
+        phone: branch.phone || '',
+      };
+    }
+    setSelectedBranch(branchObj);
+    setQuote(prev => ({
+      ...prev,
+      selectedBranch: branchObj
     }));
   };
 
@@ -322,6 +345,8 @@ export function QuoteProvider({ children }) {
         setService,
         selectedChapel,
         selectChapel,
+        selectedBranch,
+        selectBranch,
         selectedCasket,
         selectCasket,
         toggleAddon,

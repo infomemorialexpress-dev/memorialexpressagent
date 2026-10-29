@@ -64,11 +64,11 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
 
   const casket = calculation?.casket || quote?.selectedCasketObject || quote?.casketObj || {};
   const dynamicCasketPrice = Number(casket.price || casket.listPrice || calculation?.s2 || 0);
-  const dynamicCasketName = getLocalizedText(casket, 'name', isEs ? 'es' : 'en') || casket.name || '';
+  const dynamicCasketName = getLocalizedText(casket, 'name', isEs ? 'es' : 'en') || casket.itemName || casket.name || '';
   const dynamicManufacturer = casket.manufacturer || '';
-  const dynamicInterior = casket.interiorFabricColor || casket.interiorExterior || casket.interior || '';
+  const dynamicInterior = casket.interiorFabricAndColor || casket.interiorFabricColor || casket.interiorExterior || casket.interior || '';
   const dynamicExterior = casket.exteriorColor || casket.exterior || casket.color || '';
-  const dynamicConstruction = casket.constructionType || casket.construction || casket.material || '';
+  const dynamicConstruction = casket.constructionAndType || casket.constructionType || casket.construction || casket.material || '';
   const dynamicModel = casket.modelNumber || casket.model || '';
 
   // Guaranteed Add-ons from Step 5 (e.g., Memorial package)
@@ -138,14 +138,18 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const dynamicTotalNonGuaranteed = dynamicAddonsTotal + customItemsTotal + dynamicSalesTax;
   const dynamicGrandTotal = dynamicTotalGuaranteed + dynamicTotalNonGuaranteed;
 
-  const dynamicFirmName = calculation?.firmName || (homeObj.name || quote?.homeName || 'Felipe Bagues Mortuary — Los Angeles (Funeral Home)');
-  const dynamicFirmAddress = calculation?.firmAddress || (
+  const selectedBranch = quote?.selectedBranch || calculation?.selectedBranch;
+  const dynamicFirmName = selectedBranch?.branchName || calculation?.firmName || (homeObj.name || quote?.homeName || 'Felipe Bagues Mortuary — Los Angeles (Funeral Home)');
+  const branchAddress = selectedBranch
+    ? [selectedBranch.streetAddress, selectedBranch.city].filter(Boolean).join(', ')
+    : '';
+  const dynamicFirmAddress = branchAddress || calculation?.firmAddress || (
     homeObj.streetAddress ||
     homeObj.address ||
     calculation?.matchedLoc?.address ||
     '1930 E. First Street, Los Angeles, CA 90033'
   );
-  const dynamicFirmPhone = calculation?.firmPhone || homeObj.phone || '(323) 268-0759';
+  const dynamicFirmPhone = selectedBranch?.phone || calculation?.firmPhone || homeObj.phone || '(323) 268-0759';
 
   // ================= 1. DOCUMENT HEADER =================
   doc.setTextColor(...black);

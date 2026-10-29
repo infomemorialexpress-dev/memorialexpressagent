@@ -125,14 +125,16 @@ export default function AddonsOptions({ onBack, onContinue }) {
                 const hasDests = Boolean(item.hasDestinations && Array.isArray(item.destinations) && item.destinations.length > 0);
                 if (!(price >= 0 || hasDests) || item.isActive === false) return false;
 
-                // Filter by assigned service packages: only show items assigned to the selected package
-                if (selectedPackageId || selectedPackageName) {
-                  const pkgs = Array.isArray(item.assignedPackages) ? item.assignedPackages : [];
+                // Filter by assigned service packages: only show items assigned to the currently selected Service Package
+                const pkgs = Array.isArray(item.assignedPackages) ? item.assignedPackages : [];
+                if (pkgs.length > 0) {
+                  const sKey = String(quote?.service || '').toLowerCase().trim();
                   const isAssigned = pkgs.some(p => {
                     if (!p) return false;
-                    const pStr = String(p).trim();
-                    if (selectedPackageId && pStr.toLowerCase() === selectedPackageId.toLowerCase()) return true;
-                    if (selectedPackageName && pStr.toLowerCase() === selectedPackageName) return true;
+                    const pStr = String(typeof p === 'object' ? (p._id || p.id || '') : p).trim().toLowerCase();
+                    if (selectedPackageId && pStr === selectedPackageId.toLowerCase()) return true;
+                    if (selectedPackageName && (pStr === selectedPackageName || selectedPackageName.includes(pStr) || pStr.includes(selectedPackageName))) return true;
+                    if (sKey && (pStr === sKey || sKey.includes(pStr))) return true;
                     return false;
                   });
                   if (!isAssigned) return false;

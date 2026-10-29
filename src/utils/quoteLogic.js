@@ -593,11 +593,15 @@ export function calculateQuote(q, db) {
     westernGuaranteed,
     felipeGuaranteed,
     selectedChapel,
+    selectedBranch: q.selectedBranch || null,
     chapelExtra,
     chapelSurcharge: chapelExtra,
     visitationHours: q.selectedServiceObject?.visitationHours !== undefined
       ? Number(q.selectedServiceObject.visitationHours)
       : (pkgFromDb?.visitationHours ?? 3),
+    transferMiles: q.selectedServiceObject?.transferMiles !== undefined
+      ? Number(q.selectedServiceObject.transferMiles)
+      : (pkgFromDb?.transferMiles ?? 25),
     addedAddons: added
   };
 }
@@ -659,6 +663,20 @@ export function getItemizedServicesList(packageObj, calculation, isEs = false, s
   const visitationDesc = isEs
     ? `Velación (${hours} horas)`
     : `Visitation (${hours} hours)`;
+
+  const miles = packageObj?.transferMiles !== undefined
+    ? Number(packageObj.transferMiles)
+    : (calculation?.packageData?.transferMiles !== undefined
+      ? Number(calculation.packageData.transferMiles)
+      : (calculation?.serviceObj?.transferMiles !== undefined
+        ? Number(calculation.serviceObj.transferMiles)
+        : (calculation?.transferMiles !== undefined
+          ? Number(calculation.transferMiles)
+          : 25)));
+
+  const transferDesc = isEs
+    ? `Traslado del difunto (${miles} millas)`
+    : `Transfer (${miles} miles)`;
 
   let arrangements = parseNum(itemized.arrangements);
   let transfer = parseNum(itemized.transfer);
@@ -737,7 +755,7 @@ export function getItemizedServicesList(packageObj, calculation, isEs = false, s
 
   const rows = [
     formatRow('arrangements', isEs ? 'Arreglos y servicios del personal profesional' : 'Arrangements and professional staff', itemized.arrangements, arrangements),
-    formatRow('transfer', isEs ? 'Traslado del difunto (25 millas)' : 'Transfer (25 miles)', itemized.transfer, transfer),
+    formatRow('transfer', transferDesc, itemized.transfer, transfer),
     formatRow('embalming', isEs ? 'Embalsamamiento / refrigeración' : 'Embalming / refrigeration', itemized.embalming, embalming),
     formatRow('otherPreparation', isEs ? 'Otra preparación' : 'Other preparation', itemized.otherPreparation, otherPreparation),
     formatRow('visitation', visitationDesc, itemized.visitation, visitation),

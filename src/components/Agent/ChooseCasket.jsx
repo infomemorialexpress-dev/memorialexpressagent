@@ -177,6 +177,13 @@ export default function ChooseCasket({ onBack, onContinue }) {
             image: item.imageUrl || item.image || '',
             specifications: item.specifications || item.description || '',
             description: item.specifications || item.description || '',
+            manufacturer: item.manufacturer || '',
+            interiorFabricAndColor: item.interiorFabricAndColor || item.interiorFabricColor || '',
+            interiorFabricColor: item.interiorFabricAndColor || item.interiorFabricColor || '',
+            exteriorColor: item.exteriorColor || '',
+            constructionAndType: item.constructionAndType || item.constructionType || '',
+            constructionType: item.constructionAndType || item.constructionType || '',
+            modelNumber: item.modelNumber || '',
             assignedPackages: Array.isArray(item.assignedPackages) ? item.assignedPackages : [],
             assignedFuneralHomeId: item.assignedFuneralHomeId || item.funeralHomeId,
             funeralHomeId: item.assignedFuneralHomeId || item.funeralHomeId,
@@ -387,11 +394,21 @@ export default function ChooseCasket({ onBack, onContinue }) {
             const isHovered = hoveredCardId === casketKey;
             const imageUrl = casket.imageUrl || casket.image || '';
 
-            // Split specifications by commas or semicolons
-            const specsList = (casket.specifications || casket.description || '')
-              .split(/[;,]/)
-              .map(s => s.trim())
-              .filter(Boolean);
+            // Build specsList from discrete fields if present, else fallback to specifications / description
+            const discreteList = [
+              casket.constructionAndType || casket.constructionType,
+              casket.exteriorColor,
+              casket.interiorFabricAndColor || casket.interiorFabricColor,
+              casket.manufacturer ? `Mfg: ${casket.manufacturer}` : '',
+              casket.modelNumber ? `Model: ${casket.modelNumber}` : ''
+            ].filter(Boolean);
+
+            const specsList = discreteList.length > 0
+              ? discreteList
+              : (casket.specifications || casket.description || '')
+                  .split(/[;,]/)
+                  .map(s => s.trim())
+                  .filter(Boolean);
 
             const codeText =
               casket.productCode ||
