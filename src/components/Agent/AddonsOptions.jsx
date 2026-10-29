@@ -30,16 +30,19 @@ export default function AddonsOptions({ onBack, onContinue }) {
     quote?.home ||
     '';
 
-  // Fee rates ($94 for death certs per client instruction, $12 for disposition permit)
-  const deathCertUnitPrice = (quote?.deathCertUnitPrice && quote.deathCertUnitPrice !== 26 && quote.deathCertUnitPrice !== 24)
-    ? Number(quote.deathCertUnitPrice)
-    : 94;
-  const dispositionPermitPrice = Number(db?.fees?.dispositionPermit) || 12;
-
-  // Local state for quantity-based Death Certificates (default 1)
-  const [deathCertificateCount, setDeathCertificateCount] = useState(() => {
-    return Math.max(1, Number(quote.certs || quote.deathCertCount || 1));
-  });
+  // Selected Service Package from Step 3 (or Step 2 zero-indexed)
+  const selectedPackageId = String(
+    quote?.selectedServiceObject?._id ||
+    quote?.selectedServiceObject?.id ||
+    quote?.servicePackageId ||
+    ''
+  );
+  const selectedPackageName = (
+    quote?.selectedServiceObject?.packageName ||
+    quote?.selectedServiceObject?.name ||
+    quote?.serviceName ||
+    ''
+  ).trim().toLowerCase();
 
   // Local state for selected addon IDs (from quote.addons or empty Set)
   const [selectedAddonIds, setSelectedAddonIds] = useState(() => {
@@ -59,8 +62,37 @@ export default function AddonsOptions({ onBack, onContinue }) {
         }
       });
     }
-    return initial;
   });
+
+  // Local state for exactly 3 custom unlisted manual non-guaranteed rows
+  const [customItems, setCustomItems] = useState(() => {
+    if (Array.isArray(quote?.customNonGuaranteedItems) && quote.customNonGuaranteedItems.length > 0) {
+      const items = [...quote.customNonGuaranteedItems];
+      while (items.length < 3) {
+        items.push({ name: '', price: '' });
+      }
+      return items.slice(0, 3).map(it => ({
+        name: it?.name || '',
+        price: it?.price !== undefined && it?.price !== null ? it.price : ''
+      }));
+    }
+    return [
+      { name: '', price: '' },
+      { name: '', price: '' },
+      { name: '', price: '' }
+    ];
+  });
+
+  const handleCustomItemChange = (index, field, value) => {
+    setCustomItems(prev => {
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        [field]: value
+      };
+      return next;
+    });
+  };
 
   // Available add-ons list loaded strictly from live MongoDB database
   const [addonsList, setAddonsList] = useState([]);
@@ -89,11 +121,24 @@ export default function AddonsOptions({ onBack, onContinue }) {
             // Normalize backend items
             const backendItems = res.data
               .filter(item => {
-                const nameLower = (item.name || '').toLowerCase();
-                if (nameLower.includes('death certificate')) return false;
                 const price = item.listPrice !== null && item.listPrice !== undefined ? Number(item.listPrice) : Number(item.price);
                 const hasDests = Boolean(item.hasDestinations && Array.isArray(item.destinations) && item.destinations.length > 0);
-                return (price >= 0 || hasDests) && item.isActive !== false;
+                if (!(price >= 0 || hasDests) || item.isActive === false) return false;
+
+                // Filter by assigned service packages: only show items assigned to the selected package
+                if (selectedPackageId || selectedPackageName) {
+                  const pkgs = Array.isArray(item.assignedPackages) ? item.assignedPackages : [];
+                  const isAssigned = pkgs.some(p => {
+                    if (!p) return false;
+                    const pStr = String(p).trim();
+                    if (selectedPackageId && pStr.toLowerCase() === selectedPackageId.toLowerCase()) return true;
+                    if (selectedPackageName && pStr.toLowerCase() === selectedPackageName) return true;
+                    return false;
+                  });
+                  if (!isAssigned) return false;
+                }
+
+                return true;
               })
               .map(item => ({
                 id: item._id || item.id,
@@ -111,6 +156,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
                 isFixedPrice: Boolean(item.isFixedPrice),
                 hasDestinations: Boolean(item.hasDestinations),
                 destinations: Array.isArray(item.destinations) ? item.destinations : [],
+                assignedPackages: Array.isArray(item.assignedPackages) ? item.assignedPackages : [],
                 isGuaranteed: item.category === 'Guaranteed' || item.type === 'Guaranteed' || isGuaranteedAddonItem(item),
                 specifications: item.specifications || item.description || ''
               }));
@@ -138,7 +184,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
     return () => {
       isMounted = false;
     };
-  }, [funeralHomeId]);
+  }, [funeralHomeId, selectedPackageId, selectedPackageName]);
 
   // Destination selections state (mapped by addon.id)
   const [addonDestinations, setAddonDestinations] = useState(() => {
@@ -280,18 +326,8 @@ export default function AddonsOptions({ onBack, onContinue }) {
     }));
   };
 
-  // Decrement death certificates count (min 1)
-  const handleDecrementCerts = () => {
-    setDeathCertificateCount(prev => Math.max(1, prev - 1));
-  };
-
-  // Increment death certificates count
-  const handleIncrementCerts = () => {
-    setDeathCertificateCount(prev => prev + 1);
-  };
-
   // Dynamic Step Total:
-  // Guaranteed Merchandise + 11% Guaranteed Tax + Non-Guaranteed Add-ons + Certificates + Permit
+  // Guaranteed Merchandise + 11% Guaranteed Tax + Non-Guaranteed Add-ons + Custom Items
   const stepTotal = useMemo(() => {
     let guaranteedSum = 0;
     let guaranteedTaxSum = 0;
@@ -311,19 +347,26 @@ export default function AddonsOptions({ onBack, onContinue }) {
       }
     });
 
-    const certsSum = deathCertificateCount * deathCertUnitPrice;
-    const permitSum = dispositionPermitPrice;
-    const grandTotal = guaranteedSum + guaranteedTaxSum + nonGuaranteedSum + certsSum + permitSum;
+    // Custom non-guaranteed items sum
+    let customSum = 0;
+    customItems.forEach(item => {
+      const p = parseFloat(item.price) || 0;
+      if (item.name && item.name.trim() !== '' && p > 0) {
+        customSum += p;
+      }
+    });
+    nonGuaranteedSum += customSum;
+
+    const grandTotal = guaranteedSum + guaranteedTaxSum + nonGuaranteedSum;
 
     return {
       guaranteedSum,
       guaranteedTaxSum,
       nonGuaranteedSum,
-      certsSum,
-      permitSum,
+      customSum,
       grandTotal,
     };
-  }, [selectedAddonIds, addonsList, addonQuantities, customPrices, deathCertificateCount, deathCertUnitPrice, dispositionPermitPrice]);
+  }, [selectedAddonIds, addonsList, addonQuantities, customPrices, customItems]);
 
   // Continue to Step 6: save payload distinctly into QuoteContext
   const handleContinue = () => {
@@ -370,11 +413,21 @@ export default function AddonsOptions({ onBack, onContinue }) {
       }
     });
 
+    // Filter custom items that have a non-empty name
+    const filledCustomItems = customItems
+      .filter(item => item && item.name && item.name.trim() !== '')
+      .map(item => ({
+        name: item.name.trim(),
+        price: Math.max(0, parseFloat(item.price) || 0),
+        isGuaranteed: false,
+        taxable: false,
+      }));
+
+    const customItemsSum = filledCustomItems.reduce((sum, it) => sum + it.price, 0);
     const guaranteedAddonsTotal = guaranteedAddons.reduce((sum, a) => sum + a.totalPrice, 0);
     const guaranteedAddonsTax = Math.round(guaranteedAddonsTotal * 0.11 * 100) / 100;
-    const nonGuaranteedAddonsTotal = nonGuaranteedAddons.reduce((sum, a) => sum + a.totalPrice, 0);
+    const nonGuaranteedAddonsTotal = nonGuaranteedAddons.reduce((sum, a) => sum + a.totalPrice, 0) + customItemsSum;
     const selectedAddonObjects = [...guaranteedAddons, ...nonGuaranteedAddons];
-    const certsTotal = deathCertificateCount * deathCertUnitPrice;
 
     const mergedOverrides = { ...(quote.priceOverrides || {}) };
     Object.keys(customPrices).forEach(k => {
@@ -383,7 +436,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
       }
     });
 
-    // Update QuoteContext state with distinct guaranteedAddons & nonGuaranteedAddons
+    // Update QuoteContext state with distinct guaranteedAddons, nonGuaranteedAddons & customNonGuaranteedItems
     setQuote(prev => ({
       ...prev,
       addons: Array.from(selectedAddonIds),
@@ -393,17 +446,19 @@ export default function AddonsOptions({ onBack, onContinue }) {
       selectedAddonObjects,
       guaranteedAddons,
       nonGuaranteedAddons,
+      customNonGuaranteedItems: customItems,
+      filledCustomNonGuaranteedItems: filledCustomItems,
       guaranteedAddonsTotal,
       guaranteedAddonsTax,
       nonGuaranteedAddonsTotal,
       addonsStepTotal: stepTotal.grandTotal,
       flowersQty: addonQuantities['flowers'] || addonQuantities['murillo_flowers'] || addonQuantities['felipe_flowers'] || 1,
       escortQty: addonQuantities['escorts'] || addonQuantities['murillo_escort'] || 1,
-      certs: deathCertificateCount,
-      deathCertCount: deathCertificateCount,
-      deathCertUnitPrice,
-      deathCertTotal: certsTotal,
-      dispositionPermitFee: dispositionPermitPrice,
+      certs: 0,
+      deathCertCount: 0,
+      deathCertUnitPrice: 0,
+      deathCertTotal: 0,
+      dispositionPermitFee: 0,
     }));
 
     if (onContinue) {
@@ -1121,215 +1176,110 @@ export default function AddonsOptions({ onBack, onContinue }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {nonGuaranteedAddonsList.map(addon => renderAddonRow(addon, false))}
         </div>
-      </div>
 
-      {/* ================= SECTION C: STATIC GREY BOX AT THE BOTTOM FOR CERTS & PERMITS ================= */}
-      <div
-        style={{
-          backgroundColor: '#f8fafc',
-          border: '1.5px solid #cbd5e1',
-          borderRadius: '14px',
-          padding: '20px 24px',
-          marginBottom: '28px',
-        }}
-      >
+        {/* Custom / Unlisted Non-Guaranteed Merchandise UI Block (Exactly 3 Custom Rows) */}
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            marginBottom: '16px',
-            flexWrap: 'wrap',
+            marginTop: '16px',
+            padding: '16px 18px',
+            backgroundColor: '#f8fafc',
+            border: '1.5px dashed #cbd5e1',
+            borderRadius: '12px',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontWeight: 750,
-              fontSize: '15px',
-              color: '#183655',
-            }}
-          >
-            <span style={{ fontSize: '18px' }}>📓</span>
-            <span>{isEs ? 'Certificados y Permisos' : 'Certificates & Permits'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '15px' }}>✏️</span>
+              <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#1e293b' }}>
+                {isEs ? 'Artículos Adicionales Manuales (No Listados)' : 'Custom / Unlisted Cash Advance Items'}
+              </span>
+            </div>
+            <span style={{ fontSize: '11.5px', color: '#64748b' }}>
+              {isEs ? '3 filas manuales disponibles' : '3 custom rows available'}
+            </span>
           </div>
 
-          <span
-            style={{
-              fontSize: '11px',
-              fontWeight: 700,
-              backgroundColor: '#e2e8f0',
-              color: '#334155',
-              padding: '3px 10px',
-              borderRadius: '12px',
-              letterSpacing: '0.4px',
-              textTransform: 'uppercase',
-            }}
-          >
-            {isEs
-              ? 'Incluido Automáticamente (No Garantizado)'
-              : 'Automatically Included (Non-Guaranteed)'}
-          </span>
-        </div>
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: '24px',
-            alignItems: 'center',
-          }}
-        >
-          {/* Left: Certified Death Certificates with quantity selector & calculated item total */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap' }}>
-            <div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {customItems.map((item, idx) => (
               <div
+                key={idx}
                 style={{
-                  fontSize: '13.5px',
-                  fontWeight: 650,
-                  color: '#334155',
-                  marginBottom: '8px',
-                }}
-              >
-                {isEs ? 'Actas de Defunción Certificadas' : 'Certified Death Certificates'}{' '}
-                (${deathCertUnitPrice} c/u)
-              </div>
-
-              {/* Quantity Selector UI (- 1 +) */}
-              <div
-                style={{
-                  display: 'inline-flex',
+                  display: 'flex',
                   alignItems: 'center',
+                  gap: '12px',
                   backgroundColor: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '8px',
-                  overflow: 'hidden',
-                  height: '38px',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '8px 14px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
                 }}
               >
-                <button
-                  type="button"
-                  onClick={handleDecrementCerts}
-                  disabled={deathCertificateCount <= 1}
-                  style={{
-                    width: '38px',
-                    height: '100%',
-                    border: 'none',
-                    borderRight: '1px solid #e2e8f0',
-                    backgroundColor: '#ffffff',
-                    color: deathCertificateCount <= 1 ? '#94a3b8' : '#334155',
-                    fontSize: '18px',
-                    fontWeight: 600,
-                    cursor: deathCertificateCount <= 1 ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'background-color 0.15s ease',
-                  }}
-                  onMouseOver={(e) => {
-                    if (deathCertificateCount > 1) e.currentTarget.style.backgroundColor = '#f1f5f9';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.backgroundColor = '#ffffff';
-                  }}
-                >
-                  -
-                </button>
+                <div style={{ minWidth: '22px', fontSize: '12.5px', fontWeight: 700, color: '#94a3b8' }}>
+                  #{idx + 1}
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <input
+                    type="text"
+                    value={item.name}
+                    placeholder={
+                      isEs
+                        ? `Nombre del artículo #${idx + 1} (ej. Arreglo floral especial)`
+                        : `Item Name #${idx + 1} (e.g., Special Floral Spray)`
+                    }
+                    onChange={(e) => handleCustomItemChange(idx, 'name', e.target.value)}
+                    style={{
+                      width: '100%',
+                      border: 'none',
+                      outline: 'none',
+                      fontSize: '14px',
+                      color: '#1e293b',
+                      fontWeight: 500,
+                      backgroundColor: 'transparent',
+                    }}
+                  />
+                </div>
 
                 <div
                   style={{
-                    width: '46px',
-                    height: '100%',
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '15px',
-                    fontWeight: 700,
-                    color: '#183655',
-                    userSelect: 'none',
+                    gap: '4px',
+                    backgroundColor: '#f1f5f9',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    padding: '4px 10px',
+                    flexShrink: 0,
                   }}
                 >
-                  {deathCertificateCount}
+                  <span style={{ fontWeight: 700, color: '#64748b', fontSize: '14px' }}>$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0.00"
+                    value={item.price}
+                    onWheel={(e) => e.target.blur()}
+                    onKeyDown={(e) => {
+                      if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                        e.preventDefault();
+                      }
+                    }}
+                    onChange={(e) => handleCustomItemChange(idx, 'price', e.target.value)}
+                    style={{
+                      width: '80px',
+                      border: 'none',
+                      outline: 'none',
+                      fontSize: '14.5px',
+                      fontWeight: 700,
+                      color: '#0f172a',
+                      textAlign: 'right',
+                      backgroundColor: 'transparent',
+                    }}
+                  />
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleIncrementCerts}
-                  style={{
-                    width: '38px',
-                    height: '100%',
-                    border: 'none',
-                    borderLeft: '1px solid #e2e8f0',
-                    backgroundColor: '#ffffff',
-                    color: '#334155',
-                    fontSize: '18px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'background-color 0.15s ease',
-                  }}
-                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#ffffff')}
-                >
-                  +
-                </button>
               </div>
-            </div>
-
-            {/* Calculated Death Certificates Total & Breakdown */}
-            <div style={{ textAlign: 'right', minWidth: '95px' }}>
-              <div
-                style={{
-                  fontSize: '20px',
-                  fontWeight: 800,
-                  color: '#183655',
-                  lineHeight: 1.15,
-                }}
-              >
-                ${deathCertificateCount * deathCertUnitPrice}
-              </div>
-              {deathCertificateCount > 1 && (
-                <div
-                  style={{
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#64748b',
-                    marginTop: '2px',
-                  }}
-                >
-                  {deathCertificateCount} x ${deathCertUnitPrice}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right: Mandatory Disposition Permit */}
-          <div>
-            <div
-              style={{
-                fontSize: '13.5px',
-                fontWeight: 650,
-                color: '#334155',
-                marginBottom: '8px',
-              }}
-            >
-              {isEs ? 'Permiso de Disposición Obligatorio' : 'Mandatory Disposition Permit'}
-            </div>
-            <div
-              style={{
-                fontSize: '20px',
-                fontWeight: 800,
-                color: '#183655',
-              }}
-            >
-              ${dispositionPermitPrice}
-            </div>
+            ))}
           </div>
         </div>
       </div>

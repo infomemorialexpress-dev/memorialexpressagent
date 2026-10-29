@@ -486,9 +486,9 @@ export function calculateQuote(q, db) {
     }
   }
 
-  const certsCount = Math.max(1, Number(q.certs || q.deathCertCount || 1));
-  const deathCertFee = Number(q.deathCertUnitPrice || 94);
-  const dispositionPermitFee = Number(q.dispositionPermitFee || db.fees?.dispositionPermit || 12);
+  const certsCount = Number(q.certs || q.deathCertCount || 0);
+  const deathCertFee = Number(q.deathCertUnitPrice || 0);
+  const dispositionPermitFee = Number(q.dispositionPermitFee || 0);
   const mandatory = dispositionPermitFee + (certsCount * deathCertFee);
 
   const memorialPrice = h === 'murillo' ? 0 : (memorial ? getItemPrice(memorial) : 0);
@@ -537,8 +537,13 @@ export function calculateQuote(q, db) {
   const felipeShipCharges = h === 'felipe' && isShipOut(q.service) ? 10 : 0;
   const felipeCremationFee = h === 'felipe' && isCremation(q.service) ? 300 : 0;
 
+  const customItemsSum = Array.isArray(q.customNonGuaranteedItems)
+    ? q.customNonGuaranteedItems.reduce((sum, it) => sum + (it?.name?.trim() ? (Math.max(0, parseFloat(it.price) || 0)) : 0), 0)
+    : 0;
+
   // Non-Guaranteed Total
   const ng = added.reduce((tot, a) => tot + a.price, 0) +
+    customItemsSum +
     mandatory +
     urn +
     salesTax +
@@ -555,6 +560,8 @@ export function calculateQuote(q, db) {
     totalGuaranteed: s1 + s2,
     ng,
     total,
+    customItemsSum,
+    customNonGuaranteedItems: q.customNonGuaranteedItems || [],
     casket,
     packageData: p,
     itemizedServices: q.selectedServiceObject?.itemizedServices || null,

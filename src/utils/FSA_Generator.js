@@ -49,10 +49,6 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   );
   const dynamicItemizedServices = itemizedBreakdown.rows;
   const effectiveServicesTotal = itemizedBreakdown.totalServices;
-  const STATIC_DISPOSITION_PERMIT_FEE = 12.0;
-  const STATIC_DEATH_CERT_UNIT_PRICE = (quote?.deathCertUnitPrice && quote.deathCertUnitPrice !== 26 && quote.deathCertUnitPrice !== 24)
-    ? Number(quote.deathCertUnitPrice)
-    : (calculation?.deathCertFee && calculation.deathCertFee !== 26 && calculation.deathCertFee !== 24 ? Number(calculation.deathCertFee) : 94.0);
   const STATIC_SALES_TAX_RATE = 0.095;
 
   // ================= 2. DYNAMIC (CONTEXT-BASED) ELEMENTS =================
@@ -66,14 +62,14 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const isShip = serviceKey.includes('ship');
   const isBurial = !isCremation && !isShip;
 
-  const casket = calculation?.casket || quote?.casketObj || {};
-  const dynamicCasketPrice = Number(casket.price || casket.listPrice || calculation?.s2 || 1690.0);
-  const dynamicCasketName = getLocalizedText(casket, 'name', isEs ? 'es' : 'en') || casket.name || 'Gemini Silver';
-  const dynamicManufacturer = casket.manufacturer || 'Optima catalog';
-  const dynamicInterior = isEs ? t(casket.interiorExterior || casket.interior || 'crepe ivory interior', 'es') : (casket.interiorExterior || casket.interior || 'crepe ivory interior');
-  const dynamicExterior = casket.exterior || casket.color || '—';
-  const dynamicConstruction = isEs ? t(casket.material || casket.construction || '20-gauge steel', 'es') : (casket.material || casket.construction || '20-gauge steel');
-  const dynamicModel = casket.model || casket.modelNumber || '—';
+  const casket = calculation?.casket || quote?.selectedCasketObject || quote?.casketObj || {};
+  const dynamicCasketPrice = Number(casket.price || casket.listPrice || calculation?.s2 || 0);
+  const dynamicCasketName = getLocalizedText(casket, 'name', isEs ? 'es' : 'en') || casket.name || '';
+  const dynamicManufacturer = casket.manufacturer || '';
+  const dynamicInterior = casket.interiorFabricColor || casket.interiorExterior || casket.interior || '';
+  const dynamicExterior = casket.exteriorColor || casket.exterior || casket.color || '';
+  const dynamicConstruction = casket.constructionType || casket.construction || casket.material || '';
+  const dynamicModel = casket.modelNumber || casket.model || '';
 
   // Guaranteed Add-ons from Step 5 (e.g., Memorial package)
   const isGuaranteedItem = (a) => {
@@ -105,14 +101,9 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const dynamicTotalMerchandise = dynamicCasketPrice + guaranteedAddonsTotal;
   const dynamicTotalGuaranteed = effectiveServicesTotal + dynamicTotalMerchandise;
 
-  // Dynamic Non-guaranteed calculations
-  const dynamicCertsCount = Math.max(1, Number(calculation?.certsCount || quote?.certs || quote?.deathCertCount || 1));
-  const dynamicCertsTotal = dynamicCertsCount * STATIC_DEATH_CERT_UNIT_PRICE;
-
   // Casket sales tax + 11% guaranteed merchandise tax added to Sales tax
   const casketSalesTax = Math.round(dynamicCasketPrice * STATIC_SALES_TAX_RATE * 100) / 100;
   const dynamicSalesTax = Math.round((casketSalesTax + guaranteedAddonsTax) * 100) / 100;
-  const dynamicDispositionPermit = STATIC_DISPOSITION_PERMIT_FEE;
 
   // Dynamic Selected Non-Guaranteed Add-ons (Flowers, etc. - excluding guaranteed items)
   const dynamicSelectedAddons = (Array.isArray(calculation?.addedAddons) ? calculation.addedAddons : (quote?.nonGuaranteedAddons || quote?.selectedAddonObjects || []))
@@ -132,7 +123,19 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
     0
   );
 
-  const dynamicTotalNonGuaranteed = dynamicCertsTotal + dynamicAddonsTotal + dynamicSalesTax + dynamicDispositionPermit;
+  // Custom manual non-guaranteed items from Step 5
+  const customNonGuaranteedItems = (Array.isArray(quote?.customNonGuaranteedItems)
+    ? quote.customNonGuaranteedItems
+    : (Array.isArray(calculation?.customNonGuaranteedItems) ? calculation.customNonGuaranteedItems : []))
+    .filter(item => item && item.name && item.name.trim() !== '')
+    .map(item => ({
+      name: item.name.trim(),
+      price: Math.max(0, parseFloat(item.price) || 0)
+    }));
+
+  const customItemsTotal = customNonGuaranteedItems.reduce((sum, it) => sum + it.price, 0);
+
+  const dynamicTotalNonGuaranteed = dynamicAddonsTotal + customItemsTotal + dynamicSalesTax;
   const dynamicGrandTotal = dynamicTotalGuaranteed + dynamicTotalNonGuaranteed;
 
   const dynamicFirmName = calculation?.firmName || (homeObj.name || quote?.homeName || 'Felipe Bagues Mortuary — Los Angeles (Funeral Home)');
@@ -454,34 +457,41 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
 
   doc.line(margin + nonGColW, nonGInnerY, margin + nonGColW, nonGInnerY + nonGInnerH);
 
-  // Left subcolumn: Death certificates ($24 each) & Step 5 Addons
-  doc.line(margin + nonGColW - priceColW, nonGInnerY, margin + nonGColW - priceColW, nonGInnerY + nonGInnerH);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.text(
-    `${isEs ? 'Actas de defunción' : 'Death certificates'} (${dynamicCertsCount} @ ${formatMoney(STATIC_DEATH_CERT_UNIT_PRICE)})`,
-    margin + 4,
-    nonGInnerY + 11
-  );
-  doc.setFont('helvetica', 'bold');
-  doc.text(formatMoney(dynamicCertsTotal), margin + nonGColW - 4, nonGInnerY + 11, { align: 'right' });
+  // Combine dynamic selected add-ons and custom manual items for cash advance items listing
+  const allNonGuaranteedItems = [
+    ...dynamicSelectedAddons.map(addon => {
+      const aName = typeof addon === 'string'
+        ? (isEs ? t(addon, 'es') : addon)
+        : (getLocalizedText(addon, 'name', isEs ? 'es' : 'en') || addon.name || 'Add-on Item');
+      const aPrice = typeof addon === 'object' && addon.price !== undefined ? Number(addon.price) : 0;
+      return { name: aName, price: aPrice };
+    }),
+    ...customNonGuaranteedItems
+  ];
 
-  // Map any other add-ons from active QuoteContext
-  if (dynamicSelectedAddons.length > 0) {
-    const firstAddon = dynamicSelectedAddons[0];
-    const rawAddonName = typeof firstAddon === 'string'
-      ? (isEs ? t(firstAddon, 'es') : firstAddon)
-      : (getLocalizedText(firstAddon, 'name', isEs ? 'es' : 'en') || firstAddon.name || 'Add-on Item');
-    const aName = rawAddonName;
-    const aPrice = typeof firstAddon === 'object' && firstAddon.price !== undefined ? Number(firstAddon.price) : 0;
-    doc.line(margin, nonGInnerY + 16, margin + nonGColW, nonGInnerY + 16);
+  // Left subcolumn: Step 5 Non-Guaranteed Addons & Custom Items
+  doc.line(margin + nonGColW - priceColW, nonGInnerY, margin + nonGColW - priceColW, nonGInnerY + nonGInnerH);
+
+  if (allNonGuaranteedItems.length > 0) {
+    const item1 = allNonGuaranteedItems[0];
     doc.setFont('helvetica', 'normal');
-    doc.text(aName, margin + 4, nonGInnerY + 26, { maxWidth: nonGColW - priceColW - 6 });
+    doc.setFontSize(7);
+    doc.text(item1.name, margin + 4, nonGInnerY + 11, { maxWidth: nonGColW - priceColW - 6 });
     doc.setFont('helvetica', 'bold');
-    doc.text(formatMoney(aPrice), margin + nonGColW - 4, nonGInnerY + 26, { align: 'right' });
+    doc.text(formatMoney(item1.price), margin + nonGColW - 4, nonGInnerY + 11, { align: 'right' });
   }
 
-  // Right subcolumn: Sales Tax (9.5%) & Disposition permit ($12.00)
+  if (allNonGuaranteedItems.length > 1) {
+    const item2 = allNonGuaranteedItems[1];
+    doc.line(margin, nonGInnerY + 16, margin + nonGColW, nonGInnerY + 16);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text(item2.name, margin + 4, nonGInnerY + 26, { maxWidth: nonGColW - priceColW - 6 });
+    doc.setFont('helvetica', 'bold');
+    doc.text(formatMoney(item2.price), margin + nonGColW - 4, nonGInnerY + 26, { align: 'right' });
+  }
+
+  // Right subcolumn: Sales Tax & additional dynamic/custom non-guaranteed items
   const rightNonGX = margin + nonGColW;
   doc.line(margin + contentWidth - priceColW, nonGInnerY, margin + contentWidth - priceColW, nonGInnerY + nonGInnerH);
 
@@ -491,11 +501,18 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   doc.setFont('helvetica', 'bold');
   doc.text(formatMoney(dynamicSalesTax), margin + contentWidth - 4, nonGInnerY + 11, { align: 'right' });
 
-  doc.line(rightNonGX, nonGInnerY + 16, margin + contentWidth, nonGInnerY + 16);
-  doc.setFont('helvetica', 'normal');
-  doc.text(isEs ? 'Permiso de disposición' : 'Disposition permit', rightNonGX + 4, nonGInnerY + 26);
-  doc.setFont('helvetica', 'bold');
-  doc.text(formatMoney(dynamicDispositionPermit), margin + contentWidth - 4, nonGInnerY + 26, { align: 'right' });
+  if (allNonGuaranteedItems.length > 2) {
+    const remainingItems = allNonGuaranteedItems.slice(2);
+    const combinedName = remainingItems.map(it => it.name).join('; ');
+    const combinedPrice = remainingItems.reduce((sum, it) => sum + it.price, 0);
+
+    doc.line(rightNonGX, nonGInnerY + 16, margin + contentWidth, nonGInnerY + 16);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text(combinedName, rightNonGX + 4, nonGInnerY + 26, { maxWidth: nonGColW - priceColW - 6 });
+    doc.setFont('helvetica', 'bold');
+    doc.text(formatMoney(combinedPrice), margin + contentWidth - 4, nonGInnerY + 26, { align: 'right' });
+  }
 
   // TOTAL NON-GUARANTEED CASH ADVANCE ITEMS Footer
   const nonGFooterY = nonGInnerY + nonGInnerH;

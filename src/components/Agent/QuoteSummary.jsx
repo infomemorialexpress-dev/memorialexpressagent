@@ -46,10 +46,6 @@ export default function QuoteSummary({ onBack, onContinue }) {
   );
   const dynamicItemizedServices = itemizedBreakdown.rows;
   const effectiveServicesTotal = itemizedBreakdown.totalServices;
-  const STATIC_DISPOSITION_PERMIT_FEE = 12.00;
-  const STATIC_DEATH_CERT_UNIT_PRICE = (quote.deathCertUnitPrice && quote.deathCertUnitPrice !== 26 && quote.deathCertUnitPrice !== 24)
-    ? Number(quote.deathCertUnitPrice)
-    : 94.00;
   const STATIC_SALES_TAX_RATE = 0.095; // Explicitly 9.5%
 
   // ================= 2. DYNAMIC (CONTEXT-BASED) ELEMENTS =================
@@ -64,14 +60,14 @@ export default function QuoteSummary({ onBack, onContinue }) {
   const isBurial = !isCremation && !isShip;
 
   // Section II: Dynamic Casket Merchandise Details & Price
-  const casket = calculation.casket || quote.casketObj || {};
-  const dynamicCasketPrice = Number(casket.price || casket.listPrice || calculation.s2 || 1690.00);
-  const dynamicCasketName = getLocalizedText(casket, 'name', lang) || casket.name || 'Gemini Silver';
-  const dynamicManufacturer = casket.manufacturer || 'Optima catalog';
-  const dynamicInterior = casket.interiorExterior || casket.interior || 'crepe ivory interior';
-  const dynamicExterior = casket.exterior || casket.color || '—';
-  const dynamicConstruction = casket.material || casket.construction || '20-gauge steel';
-  const dynamicModel = casket.model || casket.modelNumber || '—';
+  const casket = calculation.casket || quote.selectedCasketObject || quote.casketObj || {};
+  const dynamicCasketPrice = Number(casket.price || casket.listPrice || calculation.s2 || 0);
+  const dynamicCasketName = getLocalizedText(casket, 'name', lang) || casket.name || '';
+  const dynamicManufacturer = casket.manufacturer || '';
+  const dynamicInterior = casket.interiorFabricColor || casket.interiorExterior || casket.interior || '';
+  const dynamicExterior = casket.exteriorColor || casket.exterior || casket.color || '';
+  const dynamicConstruction = casket.constructionType || casket.construction || casket.material || '';
+  const dynamicModel = casket.modelNumber || casket.model || '';
 
   // Guaranteed Add-ons from Step 5 (e.g., Memorial package)
   const isGuaranteedItem = (a) => {
@@ -102,11 +98,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
   const dynamicTotalGuaranteed = effectiveServicesTotal + dynamicTotalMerchandise;
 
   // Non-Guaranteed Cash Advance Items:
-  // 1. Dynamic Death certificates: quantity * $94
-  const dynamicCertsCount = Math.max(1, Number(quote.certs || quote.deathCertCount || calculation.certsCount || 1));
-  const dynamicCertsTotal = dynamicCertsCount * STATIC_DEATH_CERT_UNIT_PRICE;
-
-  // 2. Dynamic Selected Non-Guaranteed Add-ons from Step 5 (Flowers, Dove release, Music, etc.)
+  // 1. Dynamic Selected Non-Guaranteed Add-ons from Step 5 (Flowers, Dove release, Music, etc.)
   const dynamicSelectedAddons = (Array.isArray(quote.nonGuaranteedAddons) && quote.nonGuaranteedAddons.length > 0
     ? quote.nonGuaranteedAddons
     : (Array.isArray(calculation.addedAddons) ? calculation.addedAddons : (quote.selectedAddonObjects || [])))
@@ -126,15 +118,24 @@ export default function QuoteSummary({ onBack, onContinue }) {
     0
   );
 
-  // 3. Dynamic Sales Tax: casket tax (9.5%) + 11% guaranteed items tax
+  // 2. Dynamic Sales Tax: casket tax (9.5%) + 11% guaranteed items tax
   const casketSalesTax = Math.round(dynamicCasketPrice * STATIC_SALES_TAX_RATE * 100) / 100;
   const dynamicSalesTax = Math.round((casketSalesTax + guaranteedAddonsTax) * 100) / 100;
 
-  // 4. Disposition Permit: $12.00
-  const dynamicDispositionPermit = STATIC_DISPOSITION_PERMIT_FEE;
+  // Custom manual non-guaranteed items from Step 5
+  const customNonGuaranteedItems = (Array.isArray(quote.customNonGuaranteedItems)
+    ? quote.customNonGuaranteedItems
+    : (Array.isArray(calculation.customNonGuaranteedItems) ? calculation.customNonGuaranteedItems : []))
+    .filter(item => item && item.name && item.name.trim() !== '')
+    .map(item => ({
+      name: item.name.trim(),
+      price: Math.max(0, parseFloat(item.price) || 0)
+    }));
+
+  const customItemsTotal = customNonGuaranteedItems.reduce((sum, item) => sum + item.price, 0);
 
   // Non-guaranteed total & Final Combined Grand Total
-  const dynamicTotalNonGuaranteed = dynamicCertsTotal + dynamicAddonsTotal + dynamicSalesTax + dynamicDispositionPermit;
+  const dynamicTotalNonGuaranteed = dynamicAddonsTotal + customItemsTotal + dynamicSalesTax;
   const dynamicGrandTotal = dynamicTotalGuaranteed + dynamicTotalNonGuaranteed;
 
   // Dynamic Funeral Firm Details
@@ -156,6 +157,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
           selectedChapel,
           guaranteedAddons,
           nonGuaranteedAddons: dynamicSelectedAddons,
+          customNonGuaranteedItems,
           guaranteedAddonsTotal,
           guaranteedAddonsTax,
         },
@@ -170,11 +172,13 @@ export default function QuoteSummary({ onBack, onContinue }) {
           totalGuaranteed: dynamicTotalGuaranteed,
           salesTax: dynamicSalesTax,
           casketSalesTax,
-          dispositionPermitFee: dynamicDispositionPermit,
-          certsCount: dynamicCertsCount,
-          deathCertFee: STATIC_DEATH_CERT_UNIT_PRICE,
-          certsTotal: dynamicCertsTotal,
+          dispositionPermitFee: 0,
+          certsCount: 0,
+          deathCertFee: 0,
+          certsTotal: 0,
           addedAddons: dynamicSelectedAddons,
+          customNonGuaranteedItems,
+          customItemsTotal,
           ng: dynamicTotalNonGuaranteed,
           total: dynamicGrandTotal,
           firmName: dynamicFirmName,
@@ -184,6 +188,10 @@ export default function QuoteSummary({ onBack, onContinue }) {
             ...casket,
             name: dynamicCasketName,
             manufacturer: dynamicManufacturer,
+            interiorFabricColor: dynamicInterior,
+            exteriorColor: dynamicExterior,
+            constructionType: dynamicConstruction,
+            modelNumber: dynamicModel,
             interiorExterior: dynamicInterior,
             exterior: dynamicExterior,
             construction: dynamicConstruction,
@@ -750,57 +758,78 @@ export default function QuoteSummary({ onBack, onContinue }) {
 
           {/* Side-by-Side Subcolumns */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-            {/* Left Box: Death certificates ($24 each) & Step 5 Addons */}
+            {/* Left Box: Step 5 Addons */}
             <div style={{ borderRight: '1.5px solid #000000' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px' }}>
                 <tbody>
-                  <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
-                    <td style={{ padding: '4px 6px' }}>
-                      {isEs ? 'Actas de defunción' : 'Death certificates'} ({dynamicCertsCount} @ {formatMoney(STATIC_DEATH_CERT_UNIT_PRICE)})
-                    </td>
-                    <td
-                      style={{
-                        padding: '4px 6px',
-                        textAlign: 'right',
-                        fontWeight: 600,
-                        borderLeft: '1px solid #000000',
-                        width: '85px',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {formatMoney(dynamicCertsTotal)}
-                    </td>
-                  </tr>
-
-                  {/* Selected Add-ons mapped from QuoteContext */}
-                  {dynamicSelectedAddons.map((addon, aIdx) => {
-                    const aName = typeof addon === 'string'
-                      ? (isEs ? t(addon) : addon)
-                      : (getLocalizedText(addon, 'name', lang) || addon.name || 'Add-on Item');
-                    const aPrice = typeof addon === 'object' && addon.price !== undefined ? addon.price : 0;
-                    return (
-                      <tr key={aIdx} style={{ borderBottom: '1px solid #cbd5e1' }}>
-                        <td style={{ padding: '4px 6px' }}>{aName}</td>
-                        <td
-                          style={{
-                            padding: '4px 6px',
-                            textAlign: 'right',
-                            fontWeight: 600,
-                            borderLeft: '1px solid #000000',
-                            width: '85px',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {formatMoney(aPrice)}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {/* Selected Add-ons mapped from QuoteContext & Custom Manual Items */}
+                  {dynamicSelectedAddons.length === 0 && customNonGuaranteedItems.length === 0 ? (
+                    <tr>
+                      <td style={{ padding: '4px 6px', color: '#94a3b8', fontStyle: 'italic' }}>
+                        {isEs ? 'Ningún adicional no garantizado seleccionado' : 'No non-guaranteed add-ons selected'}
+                      </td>
+                      <td
+                        style={{
+                          padding: '4px 6px',
+                          textAlign: 'right',
+                          fontWeight: 600,
+                          borderLeft: '1px solid #000000',
+                          width: '85px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        $0.00
+                      </td>
+                    </tr>
+                  ) : (
+                    <>
+                      {dynamicSelectedAddons.map((addon, aIdx) => {
+                        const aName = typeof addon === 'string'
+                          ? (isEs ? t(addon) : addon)
+                          : (getLocalizedText(addon, 'name', lang) || addon.name || 'Add-on Item');
+                        const aPrice = typeof addon === 'object' && addon.price !== undefined ? addon.price : 0;
+                        return (
+                          <tr key={`addon-${aIdx}`} style={{ borderBottom: '1px solid #cbd5e1' }}>
+                            <td style={{ padding: '4px 6px' }}>{aName}</td>
+                            <td
+                              style={{
+                                padding: '4px 6px',
+                                textAlign: 'right',
+                                fontWeight: 600,
+                                borderLeft: '1px solid #000000',
+                                width: '85px',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {formatMoney(aPrice)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {customNonGuaranteedItems.map((item, cIdx) => (
+                        <tr key={`custom-${cIdx}`} style={{ borderBottom: '1px solid #cbd5e1' }}>
+                          <td style={{ padding: '4px 6px' }}>{item.name}</td>
+                          <td
+                            style={{
+                              padding: '4px 6px',
+                              textAlign: 'right',
+                              fontWeight: 600,
+                              borderLeft: '1px solid #000000',
+                              width: '85px',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {formatMoney(item.price)}
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
 
-            {/* Right Box: Sales Tax (9.5%) & Disposition Permit ($12.00) */}
+            {/* Right Box: Sales Tax */}
             <div>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px' }}>
                 <tbody>
@@ -826,23 +855,6 @@ export default function QuoteSummary({ onBack, onContinue }) {
                       }}
                     >
                       {formatMoney(dynamicSalesTax)}
-                    </td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
-                    <td style={{ padding: '4px 6px' }}>
-                      {isEs ? 'Permiso de disposición' : 'Disposition permit'}
-                    </td>
-                    <td
-                      style={{
-                        padding: '4px 6px',
-                        textAlign: 'right',
-                        fontWeight: 600,
-                        borderLeft: '1px solid #000000',
-                        width: '85px',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {formatMoney(dynamicDispositionPermit)}
                     </td>
                   </tr>
                 </tbody>

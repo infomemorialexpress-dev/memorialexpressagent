@@ -36,6 +36,11 @@ export function QuoteProvider({ children }) {
     addons: [],
     guaranteedAddons: [],
     nonGuaranteedAddons: [],
+    customNonGuaranteedItems: [
+      { name: '', price: '' },
+      { name: '', price: '' },
+      { name: '', price: '' }
+    ],
     guaranteedAddonsTotal: 0,
     guaranteedAddonsTax: 0,
     certs: 1,
