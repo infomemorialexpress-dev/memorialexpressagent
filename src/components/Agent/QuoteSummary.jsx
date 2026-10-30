@@ -147,8 +147,13 @@ export default function QuoteSummary({ onBack, onContinue }) {
     quote.homeName ||
     'Felipe Bagues Mortuary — Los Angeles (Funeral Home)';
 
+  const branchCityZip = [
+    selectedBranch?.city,
+    selectedBranch?.zipCode || selectedBranch?.zip
+  ].filter(Boolean).join(' ');
+
   const branchAddress = selectedBranch
-    ? [selectedBranch.streetAddress, selectedBranch.city].filter(Boolean).join(', ')
+    ? [selectedBranch.streetAddress, branchCityZip].filter(Boolean).join(', ')
     : '';
 
   const dynamicFirmAddress =

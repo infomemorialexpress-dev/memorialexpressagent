@@ -197,8 +197,8 @@ export function isDirectCremation(service, selectedServiceObject = null) {
 // Check if casket matches the selected service package
 export function casketMatchesPackage(casket, service, selectedServiceObject = null) {
   if (!casket) return false;
-  const pkgs = casket.assignedPackages;
-  if (!Array.isArray(pkgs) || pkgs.length === 0) {
+  const pkgs = Array.isArray(casket?.assignedPackages) ? casket.assignedPackages : [];
+  if (pkgs.length === 0) {
     return true; // Available for all packages
   }
 

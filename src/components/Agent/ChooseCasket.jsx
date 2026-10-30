@@ -184,7 +184,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
             constructionAndType: item.constructionAndType || item.constructionType || '',
             constructionType: item.constructionAndType || item.constructionType || '',
             modelNumber: item.modelNumber || '',
-            assignedPackages: Array.isArray(item.assignedPackages) ? item.assignedPackages : [],
+            assignedPackages: Array.isArray(item?.assignedPackages) ? item.assignedPackages : [],
             assignedFuneralHomeId: item.assignedFuneralHomeId || item.funeralHomeId,
             funeralHomeId: item.assignedFuneralHomeId || item.funeralHomeId,
             home: item.assignedFuneralHomeId || item.funeralHomeId || funeralHomeId

@@ -122,17 +122,19 @@ export default function AddonsOptions({ onBack, onContinue }) {
             // Normalize backend items
             const backendItems = res.data
               .filter(item => {
+                if (!item) return false;
                 const price = item.listPrice !== null && item.listPrice !== undefined ? Number(item.listPrice) : Number(item.price);
                 const hasDests = Boolean(item.hasDestinations && Array.isArray(item.destinations) && item.destinations.length > 0);
                 if (!(price >= 0 || hasDests) || item.isActive === false) return false;
 
-                // Filter by assigned service packages: only show items assigned to the currently selected Service Package
-                const pkgs = Array.isArray(item.assignedPackages) ? item.assignedPackages : [];
+                // Safely handle assignedPackages: explicitly check if array exists before mapping or filtering
+                const pkgs = Array.isArray(item?.assignedPackages) ? item.assignedPackages : [];
                 if (pkgs.length > 0) {
                   const sKey = String(quote?.service || '').toLowerCase().trim();
                   const isAssigned = pkgs.some(p => {
                     if (!p) return false;
-                    const pStr = String(typeof p === 'object' ? (p._id || p.id || '') : p).trim().toLowerCase();
+                    const pStr = String(typeof p === 'object' ? (p?._id || p?.id || '') : p).trim().toLowerCase();
+                    if (!pStr) return false;
                     if (selectedPackageId && pStr === selectedPackageId.toLowerCase()) return true;
                     if (selectedPackageName && (pStr === selectedPackageName || selectedPackageName.includes(pStr) || pStr.includes(selectedPackageName))) return true;
                     if (sKey && (pStr === sKey || sKey.includes(pStr))) return true;
@@ -141,6 +143,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
                   if (!isAssigned) return false;
                 }
 
+                // If not assigned to any specific package (empty array), default to visible for all packages
                 return true;
               })
               .map(item => ({
@@ -158,8 +161,8 @@ export default function AddonsOptions({ onBack, onContinue }) {
                 isMandatory: Boolean(item.isMandatory),
                 isFixedPrice: Boolean(item.isFixedPrice),
                 hasDestinations: Boolean(item.hasDestinations),
-                destinations: Array.isArray(item.destinations) ? item.destinations : [],
-                assignedPackages: Array.isArray(item.assignedPackages) ? item.assignedPackages : [],
+                destinations: Array.isArray(item?.destinations) ? item.destinations : [],
+                assignedPackages: Array.isArray(item?.assignedPackages) ? item.assignedPackages : [],
                 isGuaranteed: item.category === 'Guaranteed' || item.type === 'Guaranteed' || isGuaranteedAddonItem(item),
                 specifications: item.specifications || item.description || ''
               }));
