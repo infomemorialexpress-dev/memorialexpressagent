@@ -62,6 +62,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
         }
       });
     }
+    return initial;
   });
 
   // Local state for exactly 3 custom unlisted manual non-guaranteed rows
@@ -267,14 +268,14 @@ export default function AddonsOptions({ onBack, onContinue }) {
 
   const getAddonUnitPrice = (addon) => {
     if (!addon) return 0;
-    if (customPrices[addon.id] !== undefined && customPrices[addon.id] !== '') {
+    if (customPrices && customPrices[addon.id] !== undefined && customPrices[addon.id] !== '') {
       return Number(customPrices[addon.id]) || 0;
     }
     if (quote.priceOverrides && quote.priceOverrides[addon.id] !== undefined) {
       return Number(quote.priceOverrides[addon.id]) || 0;
     }
     if (addon.hasDestinations && Array.isArray(addon.destinations) && addon.destinations.length > 0) {
-      const selectedName = addonDestinations[addon.id] || addon.destinations[0].name;
+      const selectedName = (addonDestinations && addonDestinations[addon.id]) || addon.destinations[0].name;
       const matched = addon.destinations.find(d => d.name === selectedName) || addon.destinations[0];
       return Number(matched?.defaultPrice || 0);
     }
@@ -338,7 +339,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
     selectedAddonIds.forEach(id => {
       const found = addonsList.find(a => a.id === id);
       const unitPrice = found ? getAddonUnitPrice(found) : 0;
-      const qty = Math.max(1, Number(addonQuantities[id] || 1));
+      const qty = Math.max(1, Number((addonQuantities && addonQuantities[id]) || 1));
       const total = unitPrice * qty;
 
       if (isGuaranteedAddonItem(found || { id })) {
@@ -378,7 +379,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
     Array.from(selectedAddonIds).forEach(id => {
       const found = addonsList.find(a => a.id === id);
       const unitPrice = found ? getAddonUnitPrice(found) : 0;
-      const quantity = Math.max(1, Number(addonQuantities[id] || 1));
+      const quantity = Math.max(1, Number((addonQuantities && addonQuantities[id]) || 1));
       const totalPrice = unitPrice * quantity;
       const isGuar = isGuaranteedAddonItem(found || { id });
       const taxRate = isGuar ? 0.11 : 0;
@@ -402,7 +403,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
         isMandatory: Boolean(found?.isMandatory),
         isFixedPrice: Boolean(found?.isFixedPrice),
         hasDestinations: Boolean(found?.hasDestinations),
-        selectedDestination: addonDestinations[id] || null,
+        selectedDestination: (addonDestinations && addonDestinations[id]) || null,
         destinations: found?.destinations || []
       };
 
@@ -454,8 +455,8 @@ export default function AddonsOptions({ onBack, onContinue }) {
       guaranteedAddonsTax,
       nonGuaranteedAddonsTotal,
       addonsStepTotal: stepTotal.grandTotal,
-      flowersQty: addonQuantities['flowers'] || addonQuantities['murillo_flowers'] || addonQuantities['felipe_flowers'] || 1,
-      escortQty: addonQuantities['escorts'] || addonQuantities['murillo_escort'] || 1,
+      flowersQty: (addonQuantities && (addonQuantities['flowers'] || addonQuantities['murillo_flowers'] || addonQuantities['felipe_flowers'])) || 1,
+      escortQty: (addonQuantities && (addonQuantities['escorts'] || addonQuantities['murillo_escort'])) || 1,
       certs: 0,
       deathCertCount: 0,
       deathCertUnitPrice: 0,
@@ -471,7 +472,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
   // Helper to render an individual addon row card
   const renderAddonRow = (addon, isGuaranteed = false) => {
     const isChecked = selectedAddonIds.has(addon.id);
-    const qty = addonQuantities[addon.id] || 1;
+    const qty = (addonQuantities && addonQuantities[addon.id]) || 1;
     const unitPrice = getAddonUnitPrice(addon);
     const totalPrice = unitPrice * qty;
     const taxAmount = isGuaranteed ? Math.round(totalPrice * 0.11 * 100) / 100 : 0;
@@ -487,8 +488,8 @@ export default function AddonsOptions({ onBack, onContinue }) {
             { name: 'Europe', defaultPrice: 2000 },
             { name: 'Asia', defaultPrice: 2000 },
           ];
-      const selectedDestName = addonDestinations[addon.id] || destinationsList[0].name;
-      const currentPrice = customPrices[addon.id] !== undefined ? customPrices[addon.id] : unitPrice;
+      const selectedDestName = (addonDestinations && addonDestinations[addon.id]) || destinationsList[0].name;
+      const currentPrice = customPrices && customPrices[addon.id] !== undefined ? customPrices[addon.id] : unitPrice;
 
       return (
         <div
@@ -863,7 +864,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
                   min="0"
                   step="1"
                   readOnly={Boolean(addon.isFixedPrice)}
-                  value={customPrices[addon.id] !== undefined ? customPrices[addon.id] : unitPrice}
+                  value={(customPrices && customPrices[addon.id] !== undefined) ? customPrices[addon.id] : unitPrice}
                   onWheel={(e) => e.target.blur()}
                   onKeyDown={(e) => {
                     if (e.key === '-' || e.key === 'e' || e.key === 'E') {
@@ -916,7 +917,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
                 min="0"
                 step="1"
                 readOnly={Boolean(addon.isFixedPrice)}
-                value={customPrices[addon.id] !== undefined ? customPrices[addon.id] : unitPrice}
+                value={(customPrices && customPrices[addon.id] !== undefined) ? customPrices[addon.id] : unitPrice}
                 onWheel={(e) => e.target.blur()}
                 onKeyDown={(e) => {
                   if (e.key === '-' || e.key === 'e' || e.key === 'E') {
