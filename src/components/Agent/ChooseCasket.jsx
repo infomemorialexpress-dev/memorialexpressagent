@@ -27,12 +27,35 @@ export default function ChooseCasket({ onBack, onContinue }) {
     quote.homeId ||
     '';
 
+  // Selected Service Package from Step 3
+  const selectedPackageId = String(
+    quote?.selectedServiceObject?._id ||
+    quote?.selectedServiceObject?.id ||
+    quote?.servicePackageId ||
+    quote?.service ||
+    ''
+  );
+  const selectedPackageName = (
+    quote?.selectedServiceObject?.packageName ||
+    quote?.selectedServiceObject?.name ||
+    quote?.serviceName ||
+    quote?.service ||
+    ''
+  ).trim().toLowerCase();
+
+  // Helper to extract a strict unique identifier for each casket
+  const getCasketKey = (c) => {
+    if (!c) return '';
+    if (typeof c === 'string') return c.trim();
+    return String(c._id || c.id || c.productCode || c.name || '').trim();
+  };
+
   const [caskets, setCaskets] = useState([]);
   const [isSyncing, setIsSyncing] = useState(true);
   const [error, setError] = useState(null);
   const [localSelectedCasket, setLocalSelectedCasket] = useState(() => {
     const sel = selectedCasket || quote.selectedCasketObject;
-    if (sel && typeof sel === 'object' && (sel._id || sel.id || sel.name || sel.productCode)) {
+    if (sel && typeof sel === 'object' && !Array.isArray(sel) && (sel._id || sel.id || sel.productCode || sel.name)) {
       return sel;
     }
     return null;
@@ -160,8 +183,28 @@ export default function ChooseCasket({ onBack, onContinue }) {
         const rawItems = Array.isArray(response.data) ? response.data : [];
         const backendItems = rawItems
           .filter((item) => {
+            if (!item) return false;
             const price = item.listPrice !== null && item.listPrice !== undefined ? Number(item.listPrice) : Number(item.price);
-            return price > 0 && item.isActive !== false;
+            if (!(price > 0) || item.isActive === false) return false;
+
+            // Strict filtering based on assignedPackages:
+            // If a casket has assignedPackages mapped to it, it MUST NOT be displayed unless one of those package IDs matches the currently selectedPackageId
+            const pkgs = Array.isArray(item?.assignedPackages) ? item.assignedPackages : [];
+            if (pkgs.length > 0) {
+              const sKey = String(quote?.service || '').toLowerCase().trim();
+              const isAssigned = pkgs.some((p) => {
+                if (!p) return false;
+                const pStr = String(typeof p === 'object' ? (p?._id || p?.id || '') : p).trim().toLowerCase();
+                if (!pStr) return false;
+                if (selectedPackageId && pStr === selectedPackageId.toLowerCase()) return true;
+                if (selectedPackageName && (pStr === selectedPackageName || selectedPackageName.includes(pStr) || pStr.includes(selectedPackageName))) return true;
+                if (sKey && (pStr === sKey || sKey.includes(pStr))) return true;
+                return false;
+              });
+              if (!isAssigned) return false;
+            }
+
+            return true;
           })
           .map((item) => ({
             _id: item._id || item.id,
@@ -216,16 +259,15 @@ export default function ChooseCasket({ onBack, onContinue }) {
         if (isMounted) {
           setCaskets(unique);
 
-          // Reconcile current selection if already in state
+          // Reconcile current selection strictly matching single unique key
           if (localSelectedCasket) {
-            const found = unique.find(c =>
-              (localSelectedCasket._id && c._id && c._id === localSelectedCasket._id) ||
-              (localSelectedCasket.id && c.id && c.id === localSelectedCasket.id) ||
-              (localSelectedCasket.productCode && c.productCode && c.productCode === localSelectedCasket.productCode) ||
-              (localSelectedCasket.name && c.name && c.name.trim().toLowerCase() === localSelectedCasket.name.trim().toLowerCase())
-            );
+            const currentSelKey = getCasketKey(localSelectedCasket);
+            const found = unique.find(c => getCasketKey(c) === currentSelKey);
             if (found) {
               setLocalSelectedCasket(found);
+            } else {
+              setLocalSelectedCasket(null);
+              selectCasket(null);
             }
           }
         }
@@ -247,26 +289,28 @@ export default function ChooseCasket({ onBack, onContinue }) {
     return () => {
       isMounted = false;
     };
-  }, [funeralHomeId, quote.service, quote.selectedServiceObject]);
+  }, [funeralHomeId, quote.service, quote.selectedServiceObject, selectedPackageId, selectedPackageName]);
 
   const handlePriceChange = (casket, val) => {
     if (casket.isFixedPrice) return;
-    const casketKey = casket._id || casket.id || casket.productCode || casket.name;
+    const casketKey = getCasketKey(casket);
     const cleanVal = val === '' ? '' : Math.max(0, Number(val) || 0);
     setCustomPrices(prev => ({ ...prev, [casketKey]: cleanVal }));
     const numVal = Math.max(0, Number(cleanVal) || 0);
     updatePriceOverride(casketKey, numVal);
     const updated = { ...casket, price: numVal, listPrice: numVal };
+    // Enforce single casket selection: acts like a radio button
     setLocalSelectedCasket(updated);
     selectCasket(updated);
   };
 
   const handleCardClick = (casket) => {
-    const casketKey = casket._id || casket.id || casket.productCode || casket.name;
+    const casketKey = getCasketKey(casket);
     const existingOverride = customPrices[casketKey] !== undefined
       ? Number(customPrices[casketKey])
       : (quote.priceOverrides?.[casketKey] ?? casket.listPrice ?? casket.price ?? 0);
     const updated = { ...casket, price: existingOverride, listPrice: existingOverride };
+    // Enforce single casket selection: acts like a radio button, strictly deselecting any previously chosen one
     setLocalSelectedCasket(updated);
     selectCasket(updated);
   };
@@ -278,7 +322,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
       return;
     }
 
-    const casketKey = localSelectedCasket._id || localSelectedCasket.id || localSelectedCasket.productCode || localSelectedCasket.name;
+    const casketKey = getCasketKey(localSelectedCasket);
     const activePrice = customPrices[casketKey] !== undefined
       ? Number(customPrices[casketKey])
       : (quote.priceOverrides?.[casketKey] ?? localSelectedCasket.price ?? localSelectedCasket.listPrice ?? 0);
@@ -381,15 +425,10 @@ export default function ChooseCasket({ onBack, onContinue }) {
           className="casket-cards-grid"
         >
           {caskets.map((casket) => {
-            const casketKey = casket._id || casket.id || casket.productCode || casket.name;
-            const isSelected = Boolean(
-              localSelectedCasket && (
-                (localSelectedCasket._id && casket._id && localSelectedCasket._id === casket._id) ||
-                (localSelectedCasket.id && casket.id && localSelectedCasket.id === casket.id) ||
-                (localSelectedCasket.productCode && casket.productCode && localSelectedCasket.productCode === casket.productCode) ||
-                (localSelectedCasket.name && casket.name && localSelectedCasket.name.trim().toLowerCase() === casket.name.trim().toLowerCase())
-              )
-            );
+            const casketKey = getCasketKey(casket);
+            const selectedKey = getCasketKey(localSelectedCasket);
+            // Strict single selection check: matches ONLY this specific casket key (radio button behavior)
+            const isSelected = Boolean(selectedKey && selectedKey === casketKey);
 
             const isHovered = hoveredCardId === casketKey;
             const imageUrl = casket.imageUrl || casket.image || '';
@@ -445,8 +484,30 @@ export default function ChooseCasket({ onBack, onContinue }) {
                   transform: isHovered && !isSelected ? 'translateY(-2px)' : 'none'
                 }}
               >
-                {/* Active Selection Badge */}
-                {isSelected && (
+                {/* Radio selection indicator */}
+                {isSelected ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '12px',
+                      right: '12px',
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      backgroundColor: '#183655',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      zIndex: 2,
+                      boxShadow: '0 2px 5px rgba(24, 54, 85, 0.3)'
+                    }}
+                  >
+                    ✓
+                  </div>
+                ) : (
                   <div
                     style={{
                       position: 'absolute',
@@ -455,19 +516,11 @@ export default function ChooseCasket({ onBack, onContinue }) {
                       width: '22px',
                       height: '22px',
                       borderRadius: '50%',
-                      backgroundColor: '#183655',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '12px',
-                      fontWeight: 800,
+                      border: '2px solid #cbd5e1',
+                      backgroundColor: '#ffffff',
                       zIndex: 2,
-                      boxShadow: '0 2px 5px rgba(24, 54, 85, 0.3)'
                     }}
-                  >
-                    ✓
-                  </div>
+                  />
                 )}
 
                 {/* Top Section: Image & Details */}

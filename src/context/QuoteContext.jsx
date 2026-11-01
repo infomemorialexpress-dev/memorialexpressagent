@@ -205,7 +205,10 @@ export function QuoteProvider({ children }) {
         branchName: branch.branchName || branch.name || '',
         streetAddress: branch.streetAddress || branch.address || '',
         city: branch.city || '',
+        zipCode: branch.zipCode || branch.zip || '',
+        county: branch.county || '',
         phone: branch.phone || '',
+        briefNote: branch.briefNote || branch.note || '',
       };
     }
     setSelectedBranch(branchObj);
@@ -267,10 +270,10 @@ export function QuoteProvider({ children }) {
     let casketObj = null;
     let casketId = '';
 
-    if (casketOrId && typeof casketOrId === 'object') {
+    if (casketOrId && typeof casketOrId === 'object' && !Array.isArray(casketOrId)) {
       casketObj = casketOrId;
-      casketId = casketOrId._id || casketOrId.id || casketOrId.productCode;
-    } else if (typeof casketOrId === 'string') {
+      casketId = casketOrId._id || casketOrId.id || casketOrId.productCode || '';
+    } else if (typeof casketOrId === 'string' && casketOrId.trim() !== '') {
       casketId = casketOrId;
       casketObj = (db.caskets || []).find(c => c.id === casketId || c._id === casketId) || null;
     }
@@ -280,7 +283,7 @@ export function QuoteProvider({ children }) {
     setQuote(prev => ({
       ...prev,
       casket: casketId,
-      casketName: casketObj?.name || prev.casketName || '',
+      casketName: casketObj?.name || (casketId ? prev.casketName : '') || '',
       selectedCasketObject: casketObj,
       casketPrice: casketObj?.listPrice ?? casketObj?.price ?? 0
     }));

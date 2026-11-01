@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
@@ -56,6 +56,56 @@ export default function ConfirmHome({ onBack, onContinue }) {
   const branches = Array.isArray(home.branches) ? home.branches : [];
   const currentSelectedBranch = selectedBranch || quote?.selectedBranch || null;
 
+  // Determine if Main Location is active (default to true if neither branch nor chapel is chosen)
+  const [isMainSelected, setIsMainSelected] = useState(() => {
+    if (selectedBranch || quote?.selectedBranch) return false;
+    if (selectedChapel || quote?.selectedChapel) return false;
+    const searchCity = (quote?.searchCity || quote?.location || '').trim().toLowerCase();
+    if (searchCity && branches.length > 0) {
+      const matchingBranch = branches.find(b => (b.city || '').toLowerCase().includes(searchCity));
+      if (matchingBranch) return false;
+    }
+    return true;
+  });
+
+  // Mutually exclusive safety on mount: clean any stale conflicting state or pre-select searched branch
+  useEffect(() => {
+    if (currentSelectedBranch && currentSelectedChapel) {
+      selectChapel(null);
+      setIsMainSelected(false);
+    } else if (!currentSelectedBranch && !currentSelectedChapel) {
+      const searchCity = (quote?.searchCity || quote?.location || '').trim().toLowerCase();
+      if (searchCity && branches.length > 0) {
+        const matchingBranch = branches.find(b => (b.city || '').toLowerCase().includes(searchCity));
+        if (matchingBranch) {
+          selectBranch(matchingBranch);
+          setIsMainSelected(false);
+        }
+      }
+    }
+  }, []);
+
+  const handleSelectMainLocation = () => {
+    setValidationError('');
+    setIsMainSelected(true);
+    selectBranch(null);
+    selectChapel(null);
+  };
+
+  const handleSelectBranch = (b) => {
+    setValidationError('');
+    setIsMainSelected(false);
+    selectBranch(b);
+    selectChapel(null); // Mutually exclusive: strictly clear chapel
+  };
+
+  const handleSelectChapel = (ch) => {
+    setValidationError('');
+    setIsMainSelected(false);
+    selectChapel(ch);
+    selectBranch(null); // Mutually exclusive: strictly clear branch
+  };
+
   const isChapelSelected = (ch) => {
     if (!currentSelectedChapel) return false;
     if (currentSelectedChapel.id && ch.id && currentSelectedChapel.id === ch.id) return true;
@@ -67,16 +117,38 @@ export default function ConfirmHome({ onBack, onContinue }) {
     );
   };
 
-  const handleChapelSelect = (ch) => {
-    setValidationError('');
-    selectChapel(ch);
+  const isMainLocationActive = Boolean(isMainSelected && !currentSelectedBranch && !currentSelectedChapel);
+
+  const isBranchActive = (b) => {
+    if (isMainLocationActive || currentSelectedChapel || !currentSelectedBranch) return false;
+    return (
+      (currentSelectedBranch._id && b._id && String(currentSelectedBranch._id) === String(b._id)) ||
+      (currentSelectedBranch.branchName === b.branchName && currentSelectedBranch.streetAddress === b.streetAddress)
+    );
   };
 
+  const isChapelActive = (ch) => {
+    if (isMainLocationActive || currentSelectedBranch || !currentSelectedChapel) return false;
+    return isChapelSelected(ch);
+  };
+
+  // Validation: require either Main Location, ONE Branch, OR ONE Chapel (never a combination)
+  const hasMain = Boolean(isMainLocationActive);
+  const hasBranch = Boolean(!isMainLocationActive && currentSelectedBranch && !currentSelectedChapel);
+  const hasChapel = Boolean(!isMainLocationActive && currentSelectedChapel && !currentSelectedBranch);
+
+  const selectionCount = (hasMain ? 1 : 0) + (hasBranch ? 1 : 0) + (hasChapel ? 1 : 0);
+  const isSelectionValid = selectionCount === 1;
+
   const handleContinue = () => {
-    if (!currentSelectedChapel) {
-      const msg = lang === 'es'
-        ? 'Por favor seleccione una capilla antes de continuar.'
-        : 'Please select a chapel before proceeding.';
+    if (!isSelectionValid) {
+      const msg = selectionCount === 0
+        ? (lang === 'es'
+            ? 'Por favor seleccione la Sede Principal, una Sucursal o una Capilla antes de continuar.'
+            : 'Please select either the Main Location, ONE Branch, or ONE Chapel before proceeding.')
+        : (lang === 'es'
+            ? 'Solo puede seleccionar una opción: la Sede Principal, una Sucursal o una Capilla.'
+            : 'You may only select ONE option: Main Location, ONE Branch, or ONE Chapel.');
       setValidationError(msg);
       if (addToast) addToast(msg, 'error');
       return;
@@ -288,180 +360,190 @@ export default function ConfirmHome({ onBack, onContinue }) {
           </div>
         </div>
 
-        {/* Sub-Locations / Branches Selection (if funeral home has branches) */}
-        {branches.length > 0 && (
-          <div style={{ marginTop: '24px' }}>
+        {/* Sub-Locations / Branches Selection (Main Location + any defined Branches) */}
+        <div style={{ marginTop: '24px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '12px',
+            }}
+          >
             <div
               style={{
+                fontSize: '13px',
+                fontWeight: 700,
+                color: '#1e293b',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '12px',
+                gap: '6px',
               }}
             >
-              <div
+              <span>{branches.length > 0 ? (lang === 'es' ? '🏢 Seleccionar Sucursal / Sub-Ubicación:' : '🏢 Select Service Branch / Sub-Location:') : (lang === 'es' ? '🏢 Ubicación Principal:' : '🏢 Main Location:')}</span>
+            </div>
+            {isMainLocationActive && (
+              <span
                 style={{
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  color: '#1e293b',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#0284c7',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '4px',
                 }}
               >
-                <span>{lang === 'es' ? '🏢 Seleccionar Sucursal / Sub-Ubicación:' : '🏢 Select Service Branch / Sub-Location:'}</span>
-              </div>
-              {currentSelectedBranch && (
-                <span
-                  style={{
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#0284c7',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                  }}
-                >
-                  ✓ {currentSelectedBranch.branchName}
-                </span>
-              )}
-            </div>
+                ✓ {home.name} ({lang === 'es' ? 'Sede Principal' : 'Main Office'})
+              </span>
+            )}
+            {hasBranch && currentSelectedBranch && (
+              <span
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#0284c7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                ✓ {currentSelectedBranch.branchName}
+              </span>
+            )}
+          </div>
 
-            <div
-              role="radiogroup"
-              aria-label="Branches"
+          <div
+            role="radiogroup"
+            aria-label="Branches and Main Location"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: '12px',
+            }}
+          >
+            {/* Option 1: Main Location */}
+            <label
+              onClick={handleSelectMainLocation}
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                display: 'flex',
+                alignItems: 'flex-start',
                 gap: '12px',
+                padding: '14px 16px',
+                backgroundColor: isMainLocationActive ? '#f0f9ff' : '#ffffff',
+                border: isMainLocationActive ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease-in-out',
+                boxShadow: isMainLocationActive ? '0 2px 8px rgba(2, 132, 199, 0.15)' : '0 1px 3px rgba(0,0,0,0.02)',
               }}
             >
-              {/* Option 1: Main Location */}
-              {(() => {
-                const isMainSelected = !currentSelectedBranch;
-                return (
-                  <label
-                    onClick={() => selectBranch(null)}
+              <input
+                type="radio"
+                name="serviceLocationChoice"
+                checked={isMainLocationActive}
+                onChange={handleSelectMainLocation}
+                style={{
+                  marginTop: '3px',
+                  cursor: 'pointer',
+                  width: '18px',
+                  height: '18px',
+                  accentColor: '#0284c7',
+                }}
+              />
+              <div style={{ flex: 1 }}>
+                <div
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: 700,
+                    color: isMainLocationActive ? '#0369a1' : '#1e293b',
+                    marginBottom: '3px',
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {home.name} <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>({lang === 'es' ? 'Sede Principal' : 'Main Office'})</span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#64748b' }}>
+                  📍 {home.streetAddress || home.address || home.city}
+                </div>
+                {home.phone && (
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                    📞 {home.phone}
+                  </div>
+                )}
+              </div>
+            </label>
+
+            {/* Option 2..N: Defined Branches */}
+            {branches.map((b, bIdx) => {
+              const isSelected = isBranchActive(b);
+              return (
+                <label
+                  key={bIdx}
+                  onClick={() => handleSelectBranch(b)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '14px 16px',
+                    backgroundColor: isSelected ? '#f0f9ff' : '#ffffff',
+                    border: isSelected ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease-in-out',
+                    boxShadow: isSelected ? '0 2px 8px rgba(2, 132, 199, 0.15)' : '0 1px 3px rgba(0,0,0,0.02)',
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="serviceLocationChoice"
+                    checked={isSelected}
+                    onChange={() => handleSelectBranch(b)}
                     style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '12px',
-                      padding: '14px 16px',
-                      backgroundColor: isMainSelected ? '#f0f9ff' : '#ffffff',
-                      border: isMainSelected ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                      borderRadius: '12px',
+                      marginTop: '3px',
                       cursor: 'pointer',
-                      transition: 'all 0.15s ease-in-out',
-                      boxShadow: isMainSelected ? '0 2px 8px rgba(2, 132, 199, 0.15)' : '0 1px 3px rgba(0,0,0,0.02)',
+                      width: '18px',
+                      height: '18px',
+                      accentColor: '#0284c7',
                     }}
-                  >
-                    <input
-                      type="radio"
-                      name="selectedBranchGroup"
-                      checked={isMainSelected}
-                      onChange={() => selectBranch(null)}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div
                       style={{
-                        marginTop: '3px',
-                        cursor: 'pointer',
-                        width: '18px',
-                        height: '18px',
-                        accentColor: '#0284c7',
+                        fontSize: '14px',
+                        fontWeight: 700,
+                        color: isSelected ? '#0369a1' : '#1e293b',
+                        marginBottom: '3px',
+                        lineHeight: 1.3,
                       }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div
-                        style={{
-                          fontSize: '14px',
-                          fontWeight: 700,
-                          color: isMainSelected ? '#0369a1' : '#1e293b',
-                          marginBottom: '3px',
-                          lineHeight: 1.3,
-                        }}
-                      >
-                        {home.name} <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>({lang === 'es' ? 'Sede Principal' : 'Main Office'})</span>
-                      </div>
+                    >
+                      {b.branchName}
+                    </div>
+                    {(b.streetAddress || b.city || b.zipCode) && (
                       <div style={{ fontSize: '12px', color: '#64748b' }}>
-                        📍 {home.streetAddress || home.address || home.city}
+                        📍 {[b.streetAddress, b.city, b.zipCode].filter(Boolean).join(', ')}
+                        {b.county ? ` (${b.county})` : ''}
                       </div>
-                      {home.phone && (
-                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                          📞 {home.phone}
-                        </div>
-                      )}
-                    </div>
-                  </label>
-                );
-              })()}
-
-              {/* Option 2..N: Defined Branches */}
-              {branches.map((b, bIdx) => {
-                const isSelected = currentSelectedBranch && (
-                  currentSelectedBranch.branchName === b.branchName &&
-                  currentSelectedBranch.streetAddress === b.streetAddress
-                );
-                return (
-                  <label
-                    key={bIdx}
-                    onClick={() => selectBranch(b)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '12px',
-                      padding: '14px 16px',
-                      backgroundColor: isSelected ? '#f0f9ff' : '#ffffff',
-                      border: isSelected ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                      borderRadius: '12px',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease-in-out',
-                      boxShadow: isSelected ? '0 2px 8px rgba(2, 132, 199, 0.15)' : '0 1px 3px rgba(0,0,0,0.02)',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="selectedBranchGroup"
-                      checked={isSelected}
-                      onChange={() => selectBranch(b)}
-                      style={{
-                        marginTop: '3px',
-                        cursor: 'pointer',
-                        width: '18px',
-                        height: '18px',
-                        accentColor: '#0284c7',
-                      }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div
-                        style={{
-                          fontSize: '14px',
-                          fontWeight: 700,
-                          color: isSelected ? '#0369a1' : '#1e293b',
-                          marginBottom: '3px',
-                          lineHeight: 1.3,
-                        }}
-                      >
-                        {b.branchName}
+                    )}
+                    {b.phone && (
+                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                        📞 {b.phone}
                       </div>
-                      {(b.streetAddress || b.city) && (
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>
-                          📍 {[b.streetAddress, b.city].filter(Boolean).join(', ')}
-                        </div>
-                      )}
-                      {b.phone && (
-                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                          📞 {b.phone}
-                        </div>
-                      )}
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
+                    )}
+                    {b.briefNote && (
+                      <div style={{ fontSize: '11.5px', color: '#0369a1', fontStyle: 'italic', marginTop: '2px' }}>
+                        📝 {b.briefNote}
+                      </div>
+                    )}
+                  </div>
+                </label>
+              );
+            })}
           </div>
-        )}
+        </div>
 
-        {/* Associated Chapels & Service Branches - Selectable Radio Group */}
+        {/* Associated Chapels & Facilities - Selectable Radio Group */}
         <div style={{ marginTop: '24px' }}>
           <div
             style={{
@@ -484,9 +566,8 @@ export default function ConfirmHome({ onBack, onContinue }) {
               }}
             >
               <span>{lang === 'es' ? 'Seleccionar Capilla / Sucursal de Servicio:' : 'Select Chapel / Service Branch:'}</span>
-              <span style={{ color: '#dc2626', fontSize: '14px' }}>*</span>
             </div>
-            {currentSelectedChapel && (
+            {hasChapel && currentSelectedChapel && (
               <span
                 style={{
                   fontSize: '12px',
@@ -497,7 +578,7 @@ export default function ConfirmHome({ onBack, onContinue }) {
                   gap: '4px',
                 }}
               >
-                ✓ {lang === 'es' ? 'Capilla seleccionada' : 'Chapel selected'}
+                ✓ {currentSelectedChapel.name || (lang === 'es' ? 'Capilla seleccionada' : 'Chapel selected')}
               </span>
             )}
           </div>
@@ -512,11 +593,11 @@ export default function ConfirmHome({ onBack, onContinue }) {
             }}
           >
             {availableChapels.map((chapel, idx) => {
-              const selected = isChapelSelected(chapel);
+              const selected = isChapelActive(chapel);
               return (
                 <label
                   key={chapel.id || idx}
-                  onClick={() => handleChapelSelect(chapel)}
+                  onClick={() => handleSelectChapel(chapel)}
                   style={{
                     display: 'flex',
                     alignItems: 'flex-start',
@@ -532,9 +613,9 @@ export default function ConfirmHome({ onBack, onContinue }) {
                 >
                   <input
                     type="radio"
-                    name="selectedChapelGroup"
+                    name="serviceLocationChoice"
                     checked={selected}
-                    onChange={() => handleChapelSelect(chapel)}
+                    onChange={() => handleSelectChapel(chapel)}
                     style={{
                       marginTop: '3px',
                       cursor: 'pointer',
@@ -628,7 +709,7 @@ export default function ConfirmHome({ onBack, onContinue }) {
         </div>
       </div>
 
-      {/* Navigation Buttons Row (Matches screenshot: Back on left, Continue on right) */}
+      {/* Navigation Buttons Row */}
       <div
         style={{
           display: 'flex',
@@ -660,11 +741,11 @@ export default function ConfirmHome({ onBack, onContinue }) {
           variant="primary"
           size="lg"
           onClick={handleContinue}
-          disabled={!currentSelectedChapel}
+          disabled={!isSelectionValid}
           style={{
-            backgroundColor: currentSelectedChapel ? '#183655' : '#94a3b8',
-            borderColor: currentSelectedChapel ? '#183655' : '#94a3b8',
-            cursor: currentSelectedChapel ? 'pointer' : 'not-allowed',
+            backgroundColor: isSelectionValid ? '#183655' : '#94a3b8',
+            borderColor: isSelectionValid ? '#183655' : '#94a3b8',
+            cursor: isSelectionValid ? 'pointer' : 'not-allowed',
             padding: '12px 32px',
             fontSize: '15px',
             fontWeight: 700,

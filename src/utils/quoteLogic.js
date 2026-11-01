@@ -202,35 +202,37 @@ export function casketMatchesPackage(casket, service, selectedServiceObject = nu
     return true; // Available for all packages
   }
 
-  const s = String(service || '').toLowerCase();
-  const pkgName = String(selectedServiceObject?.packageName || selectedServiceObject?.name || '').toLowerCase();
-  const cat = String(selectedServiceObject?.category || '').toLowerCase();
+  const s = String(service || '').toLowerCase().trim();
+  const pkgId = String(selectedServiceObject?._id || selectedServiceObject?.id || '').toLowerCase().trim();
+  const pkgName = String(selectedServiceObject?.packageName || selectedServiceObject?.name || '').toLowerCase().trim();
+  const cat = String(selectedServiceObject?.category || '').toLowerCase().trim();
 
   // If no service selected yet, show all
-  if (!s && !pkgName && !cat) return true;
+  if (!s && !pkgId && !pkgName && !cat) return true;
 
   const hasMatch = pkgs.some(p => {
     if (!p) return false;
-    const pLower = String(p).toLowerCase().trim();
+    const pStr = String(typeof p === 'object' ? (p?._id || p?.id || '') : p).toLowerCase().trim();
+    if (!pStr) return false;
 
-    if (pLower === s || pLower === pkgName || pLower === cat) return true;
-    if (pkgName && (pkgName.includes(pLower) || pLower.includes(pkgName))) return true;
+    if (pkgId && pStr === pkgId) return true;
+    if (pkgName && (pStr === pkgName || pkgName.includes(pStr) || pStr.includes(pkgName))) return true;
+    if (s && (pStr === s || s.includes(pStr))) return true;
+    if (cat && (pStr === cat || cat.includes(pStr))) return true;
 
-    if (pLower.includes('two') && (s.includes('two') || pkgName.includes('two') || pkgName.includes('2'))) return true;
-    if (pLower.includes('one') && (s.includes('one') || pkgName.includes('one') || pkgName.includes('1'))) return true;
-    if (pLower.includes('traditional cremation') && (s.includes('traditional_cremation') || pkgName.includes('traditional cremation'))) return true;
-    if (pLower.includes('memorial cremation') && (s.includes('memorial_cremation') || pkgName.includes('memorial cremation'))) return true;
-    if (pLower.includes('direct cremation') && (s.includes('direct_cremation') || pkgName.includes('direct cremation'))) return true;
-    if ((pLower.includes('ship') || pLower.includes('forwarding')) && (isShipOut(s) || pkgName.includes('ship'))) return true;
-    if (pLower.includes('traditional') && !pLower.includes('cremat') && (cat.includes('traditional') || s.includes('one') || s.includes('two'))) return true;
+    if (pStr.includes('two') && (s.includes('two') || pkgName.includes('two') || pkgName.includes('2'))) return true;
+    if (pStr.includes('one') && (s.includes('one') || pkgName.includes('one') || pkgName.includes('1'))) return true;
+    if (pStr.includes('traditional cremation') && (s.includes('traditional_cremation') || pkgName.includes('traditional cremation'))) return true;
+    if (pStr.includes('memorial cremation') && (s.includes('memorial_cremation') || pkgName.includes('memorial cremation'))) return true;
+    if (pStr.includes('direct cremation') && (s.includes('direct_cremation') || pkgName.includes('direct cremation'))) return true;
+    if ((pStr.includes('ship') || pStr.includes('forwarding')) && (isShipOut(s) || pkgName.includes('ship'))) return true;
+    if (pStr.includes('traditional') && !pStr.includes('cremat') && (cat.includes('traditional') || s.includes('one') || s.includes('two'))) return true;
 
     return false;
   });
 
-  if (hasMatch) return true;
-
-  // Ensure all caskets assigned to the funeral home are available for traditional/burial/ship-out packages
-  return isCasketNeeded(selectedServiceObject || service);
+  // Strict filtering: If assignedPackages are defined, strictly require a match
+  return hasMatch;
 }
 
 // Check casket eligibility strictly mapped to funeral home and package
@@ -496,9 +498,11 @@ export function calculateQuote(q, db) {
     ? 0
     : (airTray ? (h === 'felipe' ? 250 : (h === 'western' ? 795 : getItemPrice(airTray))) : felipeAirTray);
 
-  // Chapel location surcharge
-  const matchedLoc = q.selectedChapel || getMatchedLocation(homeObj, q.location);
-  const selectedChapel = q.selectedChapel || matchedLoc || null;
+  // Chapel location surcharge: mutually exclusive with branches / main location
+  const selectedChapel = (q.selectedBranch || q.isMainLocation || q.selectedChapel === null)
+    ? null
+    : (q.selectedChapel || null);
+  const matchedLoc = selectedChapel;
   const chapelExtra = Number(selectedChapel?.surcharge) || 0;
 
   // Section 1: Services (Guaranteed)

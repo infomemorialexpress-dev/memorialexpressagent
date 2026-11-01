@@ -62,8 +62,25 @@ function getStartingPrice(home, dbPackages) {
   return null;
 }
 
-// Location text formatter (e.g., "Los Angeles · Funeral home location" or "Los Angeles · Chapel location")
-function getHomeLocationLine(home, lang) {
+// Location text formatter (e.g., "Los Angeles · Funeral home location" or "Westminster · Branch: Westminster Branch")
+function getHomeLocationLine(home, lang, searchQuery = '') {
+  const q = String(searchQuery || '').trim().toLowerCase();
+  const branches = home.branches || home.subLocations || [];
+
+  if (q && Array.isArray(branches) && branches.length > 0) {
+    const matchedBranch = branches.find(b =>
+      (b.city || '').toLowerCase().includes(q) ||
+      (b.branchName || b.name || '').toLowerCase().includes(q)
+    );
+    if (matchedBranch) {
+      const bCity = matchedBranch.city || home.city || '';
+      const bName = matchedBranch.branchName || matchedBranch.name || bCity;
+      return lang === 'es'
+        ? `${bCity} · Sucursal: ${bName}`
+        : `${bCity} · Branch: ${bName}`;
+    }
+  }
+
   const city = home.city || (home.locations && home.locations[0]?.city) || 'Los Angeles';
   const isChapel =
     home.type === 'chapel' ||
@@ -81,6 +98,7 @@ export default function LocationSearch({ onContinue }) {
   const {
     lang,
     quote,
+    setQuote,
     selectHome,
     selectedFuneralHome,
     funeralHomes,
@@ -150,6 +168,7 @@ export default function LocationSearch({ onContinue }) {
 
     return allHomes.filter(home => {
       const chapels = home.chapels || home.locations || [];
+      const branches = home.branches || home.subLocations || [];
       const homeCity = (home.city || '').toLowerCase();
       const homeZip = String(home.zipCode || home.zip || '').toLowerCase();
       const homeCounty = (home.county || '').toLowerCase();
@@ -159,36 +178,42 @@ export default function LocationSearch({ onContinue }) {
       if (searchFilter === 'City') {
         const matchesMain = homeCity.includes(q);
         const matchesChapels = chapels.some(c => (c.city || '').toLowerCase().includes(q));
-        return matchesMain || matchesChapels;
+        const matchesBranches = branches.some(b => (b.city || '').toLowerCase().includes(q));
+        return matchesMain || matchesChapels || matchesBranches;
       }
 
       if (searchFilter === 'ZIP code') {
         const matchesMain = homeZip.includes(q);
         const matchesChapels = chapels.some(c => String(c.zip || '').toLowerCase().includes(q));
-        return matchesMain || matchesChapels;
+        const matchesBranches = branches.some(b => String(b.zipCode || b.zip || '').toLowerCase().includes(q));
+        return matchesMain || matchesChapels || matchesBranches;
       }
 
       if (searchFilter === 'County' || searchFilter === 'Country') {
         const matchesMain = homeCounty.includes(q);
         const matchesChapels = chapels.some(c => (c.county || '').toLowerCase().includes(q));
+        const matchesBranches = branches.some(b => (b.county || '').toLowerCase().includes(q));
         const generalMatch = ['los angeles', 'san bernardino', 'orange', 'san diego', 'riverside', 'california', 'ca', 'usa', 'united states']
           .some(term => term.includes(q) && (homeCounty.includes(term) || homeCity.includes(term)));
-        return matchesMain || matchesChapels || generalMatch;
+        return matchesMain || matchesChapels || matchesBranches || generalMatch;
       }
 
       if (searchFilter === 'Within 15 or 20 km') {
-        const matchesCity = homeCity.includes(q) || chapels.some(c => (c.city || '').toLowerCase().includes(q));
-        const matchesZip = homeZip.includes(q) || chapels.some(c => String(c.zip || '').toLowerCase().includes(q));
-        const matchesCounty = homeCounty.includes(q) || chapels.some(c => (c.county || '').toLowerCase().includes(q));
-        const matchesAddr = homeAddress.includes(q);
+        const matchesCity = homeCity.includes(q) || chapels.some(c => (c.city || '').toLowerCase().includes(q)) || branches.some(b => (b.city || '').toLowerCase().includes(q));
+        const matchesZip = homeZip.includes(q) || chapels.some(c => String(c.zip || '').toLowerCase().includes(q)) || branches.some(b => String(b.zipCode || b.zip || '').toLowerCase().includes(q));
+        const matchesCounty = homeCounty.includes(q) || chapels.some(c => (c.county || '').toLowerCase().includes(q)) || branches.some(b => (b.county || '').toLowerCase().includes(q));
+        const matchesAddr = homeAddress.includes(q) || branches.some(b => (b.streetAddress || b.address || '').toLowerCase().includes(q));
         return matchesCity || matchesZip || matchesCounty || matchesAddr;
       }
 
       if (searchFilter === 'Funeral home name') {
-        return homeName.includes(q);
+        const matchesBranchName = branches.some(b => (b.branchName || b.name || '').toLowerCase().includes(q));
+        return homeName.includes(q) || matchesBranchName;
       }
 
-      return homeName.includes(q) || homeCity.includes(q);
+      const matchesChapels = chapels.some(c => (c.city || '').toLowerCase().includes(q) || (c.name || '').toLowerCase().includes(q));
+      const matchesBranches = branches.some(b => (b.city || '').toLowerCase().includes(q) || (b.branchName || b.name || '').toLowerCase().includes(q));
+      return homeName.includes(q) || homeCity.includes(q) || matchesChapels || matchesBranches;
     });
   }, [allHomes, searchQuery, searchFilter]);
 
@@ -196,6 +221,20 @@ export default function LocationSearch({ onContinue }) {
     const homeId = home._id || home.id;
     setLocalSelectedId(homeId);
     selectHome(home);
+  };
+
+  const handleContinueClick = () => {
+    if (!isContinueEnabled) return;
+    if (searchQuery.trim()) {
+      setQuote?.(prev => ({
+        ...prev,
+        searchCity: searchQuery.trim(),
+        location: searchQuery.trim()
+      }));
+    }
+    if (onContinue) {
+      onContinue();
+    }
   };
 
   const { t } = useTranslation();
@@ -360,7 +399,7 @@ export default function LocationSearch({ onContinue }) {
             const isSelected = localSelectedId === homeId;
             const logoSrc = getHomeLogoSrc(home);
             const fromPrice = getStartingPrice(home, db?.packages);
-            const locationLine = getHomeLocationLine(home, lang);
+            const locationLine = getHomeLocationLine(home, lang, searchQuery);
             const noteText = home.customNote || home.program || '';
             const noteColor = home.noteColor || '#008000';
 
@@ -556,7 +595,7 @@ export default function LocationSearch({ onContinue }) {
         <Button
           variant="primary"
           size="lg"
-          onClick={onContinue}
+          onClick={handleContinueClick}
           disabled={!isContinueEnabled}
           style={{
             backgroundColor: '#183655',
