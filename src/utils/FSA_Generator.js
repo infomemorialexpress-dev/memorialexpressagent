@@ -62,14 +62,34 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const isShip = serviceKey.includes('ship');
   const isBurial = !isCremation && !isShip;
 
-  const casket = calculation?.casket || quote?.selectedCasketObject || quote?.casketObj || {};
-  const dynamicCasketPrice = Number(casket.price || casket.listPrice || calculation?.s2 || 0);
-  const dynamicCasketName = getLocalizedText(casket, 'name', isEs ? 'es' : 'en') || casket.itemName || casket.name || '';
-  const dynamicManufacturer = casket.manufacturer || '';
-  const dynamicInterior = casket.interiorFabricAndColor || casket.interiorFabricColor || casket.interiorExterior || casket.interior || '';
-  const dynamicExterior = casket.exteriorColor || casket.exterior || casket.color || '';
-  const dynamicConstruction = casket.constructionAndType || casket.constructionType || casket.construction || casket.material || '';
-  const dynamicModel = casket.modelNumber || casket.model || '';
+  // Casket Selection Guard: Strictly check if a casket was explicitly chosen (never fall back to calculation.s2 or alternative containers)
+  const hasSelectedCasket = Boolean(
+    (quote?.selectedCasket && (quote.selectedCasket._id || quote.selectedCasket.id || quote.selectedCasket.name)) ||
+    (quote?.selectedCasketObject && (quote.selectedCasketObject._id || quote.selectedCasketObject.id || quote.selectedCasketObject.name)) ||
+    (quote?.casket && String(quote.casket).trim() !== '') ||
+    (calculation?.casket && (calculation.casket._id || calculation.casket.id || calculation.casket.name))
+  );
+
+  const casket = hasSelectedCasket
+    ? (calculation?.casket || quote?.selectedCasket || quote?.selectedCasketObject || quote?.casketObj || null)
+    : null;
+  const dynamicCasketPrice = hasSelectedCasket && casket
+    ? Number(casket.price ?? casket.listPrice ?? calculation?.casketPrice ?? 0)
+    : 0;
+  const dynamicCasketName = hasSelectedCasket && casket
+    ? (getLocalizedText(casket, 'name', isEs ? 'es' : 'en') || casket.itemName || casket.name || '')
+    : '';
+  const dynamicManufacturer = hasSelectedCasket && casket ? (casket.manufacturer || '') : '';
+  const dynamicInterior = hasSelectedCasket && casket
+    ? (casket.interiorFabricAndColor || casket.interiorFabricColor || casket.interiorExterior || casket.interior || '')
+    : '';
+  const dynamicExterior = hasSelectedCasket && casket
+    ? (casket.exteriorColor || casket.exterior || casket.color || '')
+    : '';
+  const dynamicConstruction = hasSelectedCasket && casket
+    ? (casket.constructionAndType || casket.constructionType || casket.construction || casket.material || '')
+    : '';
+  const dynamicModel = hasSelectedCasket && casket ? (casket.modelNumber || casket.model || '') : '';
 
   // Guaranteed Add-ons from Step 5 (e.g., Memorial package)
   const isGuaranteedItem = (a) => {
@@ -366,8 +386,12 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
         isItalic: true,
       }];
 
+  const casketPriceVal = hasSelectedCasket && dynamicCasketPrice > 0
+    ? formatMoney(dynamicCasketPrice)
+    : (hasSelectedCasket ? '$0' : '');
+
   const merchRows = [
-    { label: isEs ? 'Ataúd' : 'Casket', val: formatMoney(dynamicCasketPrice), isBold: true },
+    { label: isEs ? 'Ataúd' : 'Casket', val: casketPriceVal, isBold: true },
     { label: isEs ? 'Fabricante' : 'Manufacturer', val: dynamicManufacturer },
     { label: isEs ? 'Nombre' : 'Name', val: dynamicCasketName, isBoldVal: true },
     { label: isEs ? 'Tela y color interior' : 'Interior fabric and color', val: dynamicInterior },

@@ -60,14 +60,34 @@ export default function QuoteSummary({ onBack, onContinue }) {
   const isBurial = !isCremation && !isShip;
 
   // Section II: Dynamic Casket Merchandise Details & Price
-  const casket = calculation.casket || quote.selectedCasketObject || quote.casketObj || {};
-  const dynamicCasketPrice = Number(casket.price || casket.listPrice || calculation.s2 || 0);
-  const dynamicCasketName = getLocalizedText(casket, 'name', lang) || casket.name || '';
-  const dynamicManufacturer = casket.manufacturer || '';
-  const dynamicInterior = casket.interiorFabricColor || casket.interiorExterior || casket.interior || '';
-  const dynamicExterior = casket.exteriorColor || casket.exterior || casket.color || '';
-  const dynamicConstruction = casket.constructionType || casket.construction || casket.material || '';
-  const dynamicModel = casket.modelNumber || casket.model || '';
+  // Casket Selection Guard: Strictly check if a casket was explicitly chosen (never fall back to calculation.s2 or alternative containers)
+  const hasSelectedCasket = Boolean(
+    (quote?.selectedCasket && (quote.selectedCasket._id || quote.selectedCasket.id || quote.selectedCasket.name)) ||
+    (quote?.selectedCasketObject && (quote.selectedCasketObject._id || quote.selectedCasketObject.id || quote.selectedCasketObject.name)) ||
+    (quote?.casket && String(quote.casket).trim() !== '') ||
+    (calculation?.casket && (calculation.casket._id || calculation.casket.id || calculation.casket.name))
+  );
+
+  const casket = hasSelectedCasket
+    ? (calculation.casket || quote.selectedCasket || quote.selectedCasketObject || quote.casketObj || null)
+    : null;
+  const dynamicCasketPrice = hasSelectedCasket && casket
+    ? Number(casket.price ?? casket.listPrice ?? calculation.casketPrice ?? 0)
+    : 0;
+  const dynamicCasketName = hasSelectedCasket && casket
+    ? (getLocalizedText(casket, 'name', lang) || casket.name || '')
+    : '';
+  const dynamicManufacturer = hasSelectedCasket && casket ? (casket.manufacturer || '') : '';
+  const dynamicInterior = hasSelectedCasket && casket
+    ? (casket.interiorFabricColor || casket.interiorFabricAndColor || casket.interiorExterior || casket.interior || '')
+    : '';
+  const dynamicExterior = hasSelectedCasket && casket
+    ? (casket.exteriorColor || casket.exterior || casket.color || '')
+    : '';
+  const dynamicConstruction = hasSelectedCasket && casket
+    ? (casket.constructionType || casket.constructionAndType || casket.construction || casket.material || '')
+    : '';
+  const dynamicModel = hasSelectedCasket && casket ? (casket.modelNumber || casket.model || '') : '';
 
   // Guaranteed Add-ons from Step 5 (e.g., Memorial package)
   const isGuaranteedItem = (a) => {
@@ -207,7 +227,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
           firmName: dynamicFirmName,
           firmAddress: dynamicFirmAddress,
           firmPhone: dynamicFirmPhone,
-          casket: {
+          casket: hasSelectedCasket && casket ? {
             ...casket,
             name: dynamicCasketName,
             manufacturer: dynamicManufacturer,
@@ -220,7 +240,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
             construction: dynamicConstruction,
             model: dynamicModel,
             price: dynamicCasketPrice,
-          },
+          } : null,
         },
         db,
         lang,
@@ -557,7 +577,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {formatMoney(dynamicCasketPrice)}
+                      {hasSelectedCasket && dynamicCasketPrice > 0 ? formatMoney(dynamicCasketPrice) : (hasSelectedCasket ? '$0' : '')}
                     </td>
                   </tr>
                   <tr style={{ borderBottom: '1px solid #cbd5e1' }}>

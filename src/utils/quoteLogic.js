@@ -312,11 +312,19 @@ export function calculateQuote(q, db) {
       : (pkgFromDb?.section2 ?? 0),
   };
   const allCaskets = db.caskets || [];
-  let casket = allCaskets.find(x => (x.id === q.casket || x._id === q.casket) && isEligibleCasket(x, h, q.service, db, q.selectedServiceObject));
-  if (!casket && q.selectedCasketObject) {
+  let casket = null;
+  const rawCasketId = String(q.casket || '').trim();
+  const rawCasketObj = q.selectedCasketObject && typeof q.selectedCasketObject === 'object' && !Array.isArray(q.selectedCasketObject)
+    ? q.selectedCasketObject
+    : null;
+
+  if (rawCasketId) {
+    casket = allCaskets.find(x => (x.id === rawCasketId || x._id === rawCasketId) && isEligibleCasket(x, h, q.service, db, q.selectedServiceObject));
+  }
+  if (!casket && rawCasketObj && (rawCasketObj._id || rawCasketObj.id || rawCasketObj.productCode || rawCasketObj.name)) {
     casket = {
-      ...q.selectedCasketObject,
-      price: q.selectedCasketObject.listPrice ?? q.selectedCasketObject.price ?? 0
+      ...rawCasketObj,
+      price: rawCasketObj.listPrice ?? rawCasketObj.price ?? 0
     };
   }
   if (casket) {
@@ -566,7 +574,8 @@ export function calculateQuote(q, db) {
     total,
     customItemsSum,
     customNonGuaranteedItems: q.customNonGuaranteedItems || [],
-    casket,
+    casket: casket || null,
+    casketPrice,
     packageData: p,
     itemizedServices: q.selectedServiceObject?.itemizedServices || null,
     serviceObj: q.selectedServiceObject || null,
