@@ -171,7 +171,7 @@ export default function AgentQuoteFunnel() {
           />
         )}
 
-        {/* STEP 6: LEGAL DOCUMENTS & DIGITAL SIGNATURE (Step 7 of 7) */}
+        {/* STEP 6: LEGAL DOCUMENTS & RELEASE FORMS (Step 7 of 7) */}
         {step === 6 && (
           <LegalDocuments
             onBack={() => {
