@@ -179,7 +179,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
       setError(null);
 
       try {
-        const response = await api.get(`/catalog/location/${funeralHomeId}?type=CASKET&onlyActive=true`);
+        const response = await api.get(`/catalog/location/${funeralHomeId}?itemType=CASKET&type=CASKET&onlyActive=true`);
         const rawItems = Array.isArray(response.data)
           ? response.data
           : (Array.isArray(response.data?.data) ? response.data.data : []);
@@ -217,6 +217,9 @@ export default function ChooseCasket({ onBack, onContinue }) {
             itemName_es: item?.itemName_es || item?.name_es || '',
             name_es: item?.itemName_es || item?.name_es || '',
             category_es: item?.category_es || '',
+            itemType: item?.itemType || 'CASKET',
+            type: item?.type || 'Guaranteed',
+            category: item?.category || item?.type || 'Guaranteed',
             listPrice: Number(item?.listPrice !== undefined && item?.listPrice !== null ? item.listPrice : (item?.price || 0)),
             price: Number(item?.listPrice !== undefined && item?.listPrice !== null ? item.listPrice : (item?.price || 0)),
             imageUrl: item?.imageUrl || item?.image || '',

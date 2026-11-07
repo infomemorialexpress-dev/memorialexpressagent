@@ -116,7 +116,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
       setIsSyncing(true);
       setError(null);
       try {
-        const res = await api.get(`/catalog/location/${funeralHomeId}?type=ADDON&onlyActive=true`);
+        const res = await api.get(`/catalog/location/${funeralHomeId}?itemType=ADDON&type=ADDON&onlyActive=true`);
         if (isMounted) {
           if (res.data && Array.isArray(res.data)) {
             // Normalize backend items
