@@ -537,10 +537,12 @@ export function calculateQuote(q, db) {
     westernGuaranteedPrice +
     felipeGuaranteedPrice;
 
-  // Taxes
-  const salesTax = h === 'felipe'
-    ? Math.round((s2 - airTrayPrice) * 11) / 100 + Math.round(airTrayPrice * 0.11)
-    : Math.round(s2 * 11) / 100;
+  // Taxes: Flat 11% tax rate applied across all Section II (Merchandise) items: Caskets and Guaranteed Merchandise
+  const defaultTaxRate = 0.11;
+  const guaranteedAddonsTotal = guaranteedAddonsBasePrice;
+  const taxableAmount = (Number(casketPrice) || 0) + (Number(guaranteedAddonsTotal) || 0);
+  const salesTax = Math.round(taxableAmount * defaultTaxRate * 100) / 100;
+  const casketSalesTax = Math.round((Number(casketPrice) || 0) * defaultTaxRate * 100) / 100;
 
   // Consulate / Ship Fees
   const consulateRate = h === 'murillo' ? 300 : (h === 'western' ? 995 : (h === 'felipe' ? 660 : 400));
@@ -583,6 +585,9 @@ export function calculateQuote(q, db) {
     matchedLoc,
     chapelExtra,
     salesTax,
+    taxRate: defaultTaxRate,
+    casketSalesTax,
+    taxableAmount,
     mandatory,
     urn,
     deathCertFee,

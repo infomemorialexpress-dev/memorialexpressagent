@@ -46,7 +46,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
   );
   const dynamicItemizedServices = itemizedBreakdown.rows;
   const effectiveServicesTotal = itemizedBreakdown.totalServices;
-  const STATIC_SALES_TAX_RATE = 0.095; // Explicitly 9.5%
+  const STATIC_SALES_TAX_RATE = 0.11; // Flat 11% tax rate across all Section II (Merchandise) items
 
   // ================= 2. DYNAMIC (CONTEXT-BASED) ELEMENTS =================
   const homeObj = calculation.homeObj || quote.selectedHomeObj || {};
@@ -138,9 +138,9 @@ export default function QuoteSummary({ onBack, onContinue }) {
     0
   );
 
-  // 2. Dynamic Sales Tax: casket tax (9.5%) + 11% guaranteed items tax
+  // 2. Dynamic Sales Tax: flat 11% across all Section II (Merchandise) items: (casketPrice + guaranteedAddonsTotal) * 0.11
   const casketSalesTax = Math.round(dynamicCasketPrice * STATIC_SALES_TAX_RATE * 100) / 100;
-  const dynamicSalesTax = Math.round((casketSalesTax + guaranteedAddonsTax) * 100) / 100;
+  const dynamicSalesTax = Math.round((dynamicCasketPrice + guaranteedAddonsTotal) * STATIC_SALES_TAX_RATE * 100) / 100;
 
   // Custom manual non-guaranteed items from Step 5
   const customNonGuaranteedItems = (Array.isArray(quote.customNonGuaranteedItems)
@@ -878,7 +878,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                 <tbody>
                   <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
                     <td style={{ padding: '4px 6px' }}>
-                      <div>{isEs ? 'Impuesto sobre Ventas' : 'Sales Tax'}</div>
+                      <div>{isEs ? 'Impuesto sobre Ventas (11%)' : 'Sales Tax (11%)'}</div>
                       {guaranteedAddonsTax > 0 && (
                         <div style={{ fontSize: '9px', color: '#64748b', marginTop: '1px' }}>
                           {isEs

@@ -49,7 +49,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   );
   const dynamicItemizedServices = itemizedBreakdown.rows;
   const effectiveServicesTotal = itemizedBreakdown.totalServices;
-  const STATIC_SALES_TAX_RATE = 0.095;
+  const STATIC_SALES_TAX_RATE = 0.11;
 
   // ================= 2. DYNAMIC (CONTEXT-BASED) ELEMENTS =================
   const homeObj = calculation?.homeObj || quote?.selectedHomeObj || {};
@@ -121,9 +121,9 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const dynamicTotalMerchandise = dynamicCasketPrice + guaranteedAddonsTotal;
   const dynamicTotalGuaranteed = effectiveServicesTotal + dynamicTotalMerchandise;
 
-  // Casket sales tax + 11% guaranteed merchandise tax added to Sales tax
+  // Flat 11% sales tax across all Section II (Merchandise) items: Caskets and Guaranteed Merchandise
   const casketSalesTax = Math.round(dynamicCasketPrice * STATIC_SALES_TAX_RATE * 100) / 100;
-  const dynamicSalesTax = Math.round((casketSalesTax + guaranteedAddonsTax) * 100) / 100;
+  const dynamicSalesTax = Math.round((dynamicCasketPrice + guaranteedAddonsTotal) * STATIC_SALES_TAX_RATE * 100) / 100;
 
   // Dynamic Selected Non-Guaranteed Add-ons (Flowers, etc. - excluding guaranteed items)
   const dynamicSelectedAddons = (Array.isArray(calculation?.addedAddons) ? calculation.addedAddons : (quote?.nonGuaranteedAddons || quote?.selectedAddonObjects || []))
@@ -530,9 +530,27 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
-  doc.text(isEs ? 'Impuesto sobre Ventas' : 'Sales Tax', rightNonGX + 4, nonGInnerY + 11);
+  doc.text(
+    isEs ? 'Impuesto sobre Ventas (11%)' : 'Sales Tax (11%)',
+    rightNonGX + 4,
+    nonGInnerY + (guaranteedAddonsTax > 0 ? 8.5 : 11)
+  );
   doc.setFont('helvetica', 'bold');
   doc.text(formatMoney(dynamicSalesTax), margin + contentWidth - 4, nonGInnerY + 11, { align: 'right' });
+
+  if (guaranteedAddonsTax > 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5.5);
+    doc.setTextColor(...mutedGray);
+    doc.text(
+      isEs
+        ? `(incluye 11% sobre mercancía garantizada: ${formatMoney(guaranteedAddonsTax)})`
+        : `(includes 11% tax on guaranteed items: ${formatMoney(guaranteedAddonsTax)})`,
+      rightNonGX + 4,
+      nonGInnerY + 15
+    );
+    doc.setTextColor(...black);
+  }
 
   if (allNonGuaranteedItems.length > 2) {
     const remainingItems = allNonGuaranteedItems.slice(2);
