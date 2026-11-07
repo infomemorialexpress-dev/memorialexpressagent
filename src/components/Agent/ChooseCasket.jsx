@@ -180,12 +180,15 @@ export default function ChooseCasket({ onBack, onContinue }) {
 
       try {
         const response = await api.get(`/catalog/location/${funeralHomeId}?type=CASKET&onlyActive=true`);
-        const rawItems = Array.isArray(response.data) ? response.data : [];
+        const rawItems = Array.isArray(response.data)
+          ? response.data
+          : (Array.isArray(response.data?.data) ? response.data.data : []);
+
         const backendItems = rawItems
           .filter((item) => {
             if (!item) return false;
-            const price = item.listPrice !== null && item.listPrice !== undefined ? Number(item.listPrice) : Number(item.price);
-            if (!(price > 0) || item.isActive === false) return false;
+            const price = item?.listPrice !== null && item?.listPrice !== undefined ? Number(item.listPrice) : Number(item?.price || 0);
+            if (!(price > 0) || item?.isActive === false) return false;
 
             // Strict filtering based on assignedPackages:
             // If a casket has assignedPackages mapped to it, it MUST NOT be displayed unless one of those package IDs matches the currently selectedPackageId
@@ -207,34 +210,34 @@ export default function ChooseCasket({ onBack, onContinue }) {
             return true;
           })
           .map((item) => ({
-            _id: item._id || item.id,
-            id: item._id || item.id,
-            name: item.name,
-            itemName: item.itemName || item.name,
-            itemName_es: item.itemName_es || item.name_es || '',
-            name_es: item.itemName_es || item.name_es || '',
-            category_es: item.category_es || '',
-            listPrice: Number(item.listPrice || item.price || 0),
-            price: Number(item.listPrice || item.price || 0),
-            imageUrl: item.imageUrl || item.image || '',
-            image: item.imageUrl || item.image || '',
-            specifications: item.specifications || item.description || '',
-            description: item.specifications || item.description || '',
-            manufacturer: item.manufacturer || '',
-            interiorFabricAndColor: item.interiorFabricAndColor || item.interiorFabricColor || '',
-            interiorFabricColor: item.interiorFabricAndColor || item.interiorFabricColor || '',
-            exteriorColor: item.exteriorColor || '',
-            constructionAndType: item.constructionAndType || item.constructionType || '',
-            constructionType: item.constructionAndType || item.constructionType || '',
-            modelNumber: item.modelNumber || '',
+            _id: item?._id || item?.id || '',
+            id: item?._id || item?.id || '',
+            name: item?.name || item?.itemName || '',
+            itemName: item?.itemName || item?.name || '',
+            itemName_es: item?.itemName_es || item?.name_es || '',
+            name_es: item?.itemName_es || item?.name_es || '',
+            category_es: item?.category_es || '',
+            listPrice: Number(item?.listPrice !== undefined && item?.listPrice !== null ? item.listPrice : (item?.price || 0)),
+            price: Number(item?.listPrice !== undefined && item?.listPrice !== null ? item.listPrice : (item?.price || 0)),
+            imageUrl: item?.imageUrl || item?.image || '',
+            image: item?.imageUrl || item?.image || '',
+            specifications: item?.specifications || item?.description || '',
+            description: item?.specifications || item?.description || '',
+            manufacturer: item?.manufacturer || '',
+            interiorFabricAndColor: item?.interiorFabricAndColor || item?.interiorFabricColor || item?.interior || '',
+            interiorFabricColor: item?.interiorFabricAndColor || item?.interiorFabricColor || item?.interior || '',
+            exteriorColor: item?.exteriorColor || item?.exterior || item?.color || '',
+            constructionAndType: item?.constructionAndType || item?.constructionType || item?.construction || item?.material || '',
+            constructionType: item?.constructionAndType || item?.constructionType || item?.construction || item?.material || '',
+            modelNumber: item?.modelNumber || item?.model || '',
             assignedPackages: Array.isArray(item?.assignedPackages) ? item.assignedPackages : [],
-            assignedFuneralHomeId: item.assignedFuneralHomeId || item.funeralHomeId,
-            funeralHomeId: item.assignedFuneralHomeId || item.funeralHomeId,
-            home: item.assignedFuneralHomeId || item.funeralHomeId || funeralHomeId
+            assignedFuneralHomeId: item?.assignedFuneralHomeId || item?.funeralHomeId || funeralHomeId,
+            funeralHomeId: item?.assignedFuneralHomeId || item?.funeralHomeId || funeralHomeId,
+            home: item?.assignedFuneralHomeId || item?.funeralHomeId || funeralHomeId
           }));
 
         const eligible = backendItems.filter((c) =>
-          isEligibleCasket(c, funeralHomeId || quote.home, quote.service, null, quote.selectedServiceObject)
+          isEligibleCasket(c, funeralHomeId || quote?.home, quote?.service, null, quote?.selectedServiceObject)
         );
 
         // Deduplicate by item ID or distinct attributes (prevents discarding distinct casket models sharing family names)
@@ -248,12 +251,22 @@ export default function ChooseCasket({ onBack, onContinue }) {
           }
         }
 
+        // If backend returns empty array (e.g. unpriced location in DB), gracefully fallback to local db.caskets if available
+        if (unique.length === 0 && Array.isArray(db?.caskets) && db.caskets.length > 0) {
+          const fallbackEligible = db.caskets.filter((c) =>
+            isEligibleCasket(c, funeralHomeId || quote?.home, quote?.service, db, quote?.selectedServiceObject)
+          );
+          if (fallbackEligible.length > 0) {
+            unique.push(...fallbackEligible);
+          }
+        }
+
         // Sort: canonical favorites first, then by listPrice descending
         unique.sort((a, b) => {
-          const wA = canonicalOrder[(a.name || '').toLowerCase()] || 999;
-          const wB = canonicalOrder[(b.name || '').toLowerCase()] || 999;
+          const wA = canonicalOrder[(a?.name || '').toLowerCase()] || 999;
+          const wB = canonicalOrder[(b?.name || '').toLowerCase()] || 999;
           if (wA !== wB) return wA - wB;
-          return (b.listPrice || b.price || 0) - (a.listPrice || a.price || 0);
+          return (b?.listPrice || b?.price || 0) - (a?.listPrice || a?.price || 0);
         });
 
         if (isMounted) {
@@ -274,8 +287,16 @@ export default function ChooseCasket({ onBack, onContinue }) {
       } catch (err) {
         console.error('[ChooseCasket] Live fetch error:', err);
         if (isMounted) {
-          setCaskets([]);
-          setError(lang === 'es' ? 'Error al cargar los ataúdes desde la base de datos.' : 'Failed to load caskets from the database.');
+          const fallbackCaskets = (db?.caskets || []).filter((c) =>
+            isEligibleCasket(c, funeralHomeId || quote?.home, quote?.service, db, quote?.selectedServiceObject)
+          );
+          if (fallbackCaskets.length > 0) {
+            setCaskets(fallbackCaskets);
+            setError(null);
+          } else {
+            setCaskets([]);
+            setError(lang === 'es' ? 'Error al cargar los ataúdes desde la base de datos.' : 'Failed to load caskets from the database.');
+          }
         }
       } finally {
         if (isMounted) {
@@ -431,33 +452,33 @@ export default function ChooseCasket({ onBack, onContinue }) {
             const isSelected = Boolean(selectedKey && selectedKey === casketKey);
 
             const isHovered = hoveredCardId === casketKey;
-            const imageUrl = casket.imageUrl || casket.image || '';
+            const imageUrl = casket?.imageUrl || casket?.image || '';
 
             // Build specsList from discrete fields if present, else fallback to specifications / description
             const discreteList = [
-              casket.constructionAndType || casket.constructionType,
-              casket.exteriorColor,
-              casket.interiorFabricAndColor || casket.interiorFabricColor,
-              casket.manufacturer ? `Mfg: ${casket.manufacturer}` : '',
-              casket.modelNumber ? `Model: ${casket.modelNumber}` : ''
+              casket?.constructionAndType || casket?.constructionType,
+              casket?.exteriorColor,
+              casket?.interiorFabricAndColor || casket?.interiorFabricColor,
+              casket?.manufacturer ? `Mfg: ${casket.manufacturer}` : '',
+              casket?.modelNumber ? `Model: ${casket.modelNumber}` : ''
             ].filter(Boolean);
 
             const specsList = discreteList.length > 0
               ? discreteList
-              : (casket.specifications || casket.description || '')
+              : (casket?.specifications || casket?.description || '')
                   .split(/[;,]/)
                   .map(s => s.trim())
                   .filter(Boolean);
 
             const codeText =
-              casket.productCode ||
-              casket.code ||
-              (casket._id ? casket._id.slice(-8) : '71006846');
+              casket?.productCode ||
+              casket?.code ||
+              (casket?._id ? String(casket._id).slice(-8) : '71006846');
 
-            const priceVal = casket.listPrice ?? casket.price ?? 0;
+            const priceVal = casket?.listPrice ?? casket?.price ?? 0;
             const currentPrice = customPrices[casketKey] !== undefined
               ? Number(customPrices[casketKey])
-              : (quote.priceOverrides?.[casketKey] ?? casket.listPrice ?? casket.price ?? 0);
+              : (quote.priceOverrides?.[casketKey] ?? casket?.listPrice ?? casket?.price ?? 0);
 
             return (
               <div
@@ -1216,7 +1237,13 @@ export default function ChooseCasket({ onBack, onContinue }) {
               <strong style={{ color: '#183655' }}>
                 {lang === 'es' ? 'Especificaciones:' : 'Specifications:'}
               </strong>{' '}
-              {zoomModalCasket.specifications || zoomModalCasket.description}
+              {[
+                zoomModalCasket?.constructionAndType || zoomModalCasket?.constructionType,
+                zoomModalCasket?.exteriorColor,
+                zoomModalCasket?.interiorFabricAndColor || zoomModalCasket?.interiorFabricColor,
+                zoomModalCasket?.manufacturer ? `Mfg: ${zoomModalCasket.manufacturer}` : '',
+                zoomModalCasket?.modelNumber ? `Model: ${zoomModalCasket.modelNumber}` : ''
+              ].filter(Boolean).join(' • ') || zoomModalCasket?.specifications || zoomModalCasket?.description || ''}
             </div>
 
             {/* Modal Actions */}
