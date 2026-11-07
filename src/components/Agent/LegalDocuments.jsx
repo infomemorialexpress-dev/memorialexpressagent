@@ -5,29 +5,6 @@ import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
 
-/**
- * Resolves a full, accessible document URL for uploaded custom forms.
- * If the document path starts with /uploads or /, it prepends the backend server origin URL.
- */
-export function getDocumentUrl(formOrUrl) {
-  if (!formOrUrl) return '';
-  const rawUrl = typeof formOrUrl === 'string' ? formOrUrl : (formOrUrl.fileUrl || formOrUrl.url || '');
-  if (!rawUrl || typeof rawUrl !== 'string') return '';
-  const trimmed = rawUrl.trim();
-  if (
-    trimmed.startsWith('http://') ||
-    trimmed.startsWith('https://') ||
-    trimmed.startsWith('blob:') ||
-    trimmed.startsWith('data:')
-  ) {
-    return trimmed;
-  }
-  const apiBase = import.meta.env.VITE_API_URL || api.defaults?.baseURL || 'https://memorialexpressbackend.onrender.com/api';
-  const origin = apiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
-  const path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-  return `${origin}${path}`;
-}
-
 export default function LegalDocuments({ onBack, onContinue }) {
   const { t } = useTranslation();
   const { lang, quote, funeralHomes = [], addToast } = useQuote();
@@ -239,8 +216,8 @@ export default function LegalDocuments({ onBack, onContinue }) {
     try {
       let pdfDoc;
 
-      // 1. Fetch PDF from docUrl or create base template
-      const docUrl = getDocumentUrl(selectedForm);
+      // 1. Fetch PDF from form URL or create base template
+      const docUrl = selectedForm.fileUrl || selectedForm.url || '';
       if (docUrl && docUrl.trim()) {
         try {
           const res = await fetch(docUrl);
@@ -438,26 +415,23 @@ export default function LegalDocuments({ onBack, onContinue }) {
                   {form.formTitle}
                 </div>
 
-                {(() => {
-                  const docUrl = getDocumentUrl(form);
-                  return docUrl ? (
-                    <div style={{ fontSize: '11.5px', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <a
-                        href={docUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ color: '#2563eb', textDecoration: 'underline' }}
-                      >
-                        {isEs ? 'Ver PDF Original ↗' : 'Preview Original PDF ↗'}
-                      </a>
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>
-                      {isEs ? 'Plantilla oficial estandarizada' : 'Official standardized release document'}
-                    </div>
-                  );
-                })()}
+                {form.fileUrl || form.url ? (
+                  <div style={{ fontSize: '11.5px', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <a
+                      href={form.fileUrl || form.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ color: '#2563eb', textDecoration: 'underline' }}
+                    >
+                      {isEs ? 'Ver PDF Original ↗' : 'Preview Original PDF ↗'}
+                    </a>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    {isEs ? 'Plantilla oficial estandarizada' : 'Official standardized release document'}
+                  </div>
+                )}
               </div>
             );
           })}
