@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { formatMoney, getItemizedServicesList, t, getLocalizedText } from './quoteLogic.js';
+import { formatMoney, formatCatalogPrice, getItemizedServicesList, t, getLocalizedText } from './quoteLogic.js';
 
 function getTranslatedServiceTitle(title, isEs) {
   if (!isEs) return title;
@@ -131,7 +131,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
       const aPrice = typeof addon === 'object' && addon.price !== undefined ? Number(addon.price) : 0;
       const aName = typeof addon === 'string' ? addon : (addon.name || '');
       const aId = typeof addon === 'object' && addon.id ? String(addon.id) : '';
-      if (aPrice <= 0 && aId !== 'music') return false;
+      if (aPrice < 0) return false;
       if (aName.startsWith('western_') || aName.startsWith('felipe_')) return false;
       if (aId.startsWith('western_') || aId.startsWith('felipe_')) return false;
       if (isGuaranteedItem(addon)) return false;
@@ -375,8 +375,8 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
     ? guaranteedAddons.map(item => {
         const translatedName = isEs ? (getLocalizedText(item, 'name', 'es') || t(item.name, 'es')) : (item.name || '');
         return {
-          label: item.quantity > 1 ? `${translatedName} (${item.quantity} × ${formatMoney(item.unitPrice)})` : translatedName,
-          val: formatMoney(item.totalPrice ?? item.price),
+          label: item.quantity > 1 ? `${translatedName} (${item.quantity} × ${formatCatalogPrice(item.unitPrice)})` : translatedName,
+          val: formatCatalogPrice(item.totalPrice ?? item.price),
           isBoldVal: true,
         };
       })
@@ -386,9 +386,9 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
         isItalic: true,
       }];
 
-  const casketPriceVal = hasSelectedCasket && dynamicCasketPrice > 0
-    ? formatMoney(dynamicCasketPrice)
-    : (hasSelectedCasket ? '$0' : '');
+  const casketPriceVal = hasSelectedCasket
+    ? formatCatalogPrice(dynamicCasketPrice)
+    : '';
 
   const merchRows = [
     { label: isEs ? 'Ataúd' : 'Casket', val: casketPriceVal, isBold: true },
@@ -511,7 +511,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
     doc.setFontSize(7);
     doc.text(item1.name, margin + 4, nonGInnerY + 11, { maxWidth: nonGColW - priceColW - 6 });
     doc.setFont('helvetica', 'bold');
-    doc.text(formatMoney(item1.price), margin + nonGColW - 4, nonGInnerY + 11, { align: 'right' });
+    doc.text(formatCatalogPrice(item1.price), margin + nonGColW - 4, nonGInnerY + 11, { align: 'right' });
   }
 
   if (allNonGuaranteedItems.length > 1) {
@@ -521,7 +521,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
     doc.setFontSize(7);
     doc.text(item2.name, margin + 4, nonGInnerY + 26, { maxWidth: nonGColW - priceColW - 6 });
     doc.setFont('helvetica', 'bold');
-    doc.text(formatMoney(item2.price), margin + nonGColW - 4, nonGInnerY + 26, { align: 'right' });
+    doc.text(formatCatalogPrice(item2.price), margin + nonGColW - 4, nonGInnerY + 26, { align: 'right' });
   }
 
   // Right subcolumn: Sales Tax & additional dynamic/custom non-guaranteed items
@@ -562,7 +562,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
     doc.setFontSize(7);
     doc.text(combinedName, rightNonGX + 4, nonGInnerY + 26, { maxWidth: nonGColW - priceColW - 6 });
     doc.setFont('helvetica', 'bold');
-    doc.text(formatMoney(combinedPrice), margin + contentWidth - 4, nonGInnerY + 26, { align: 'right' });
+    doc.text(formatCatalogPrice(combinedPrice), margin + contentWidth - 4, nonGInnerY + 26, { align: 'right' });
   }
 
   // TOTAL NON-GUARANTEED CASH ADVANCE ITEMS Footer

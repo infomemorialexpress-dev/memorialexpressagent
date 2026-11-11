@@ -55,7 +55,27 @@ export default function MerchandiseCard({
         </div>
 
         <div className="merchandise-price-row">
-          <div className="merchandise-price">{formatMoney(casket.price)}</div>
+          <div className="merchandise-price">
+            {Number(casket.price) === 0 ? (
+              <span
+                style={{
+                  display: 'inline-block',
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  letterSpacing: '0.5px',
+                  backgroundColor: '#ecfdf5',
+                  color: '#047857',
+                  border: '1px solid #a7f3d0',
+                }}
+              >
+                INCL
+              </span>
+            ) : (
+              formatMoney(casket.price)
+            )}
+          </div>
           <span className="merchandise-badge badge-guaranteed">
             {lang === 'es' ? 'Garantizado' : 'Guaranteed'}
           </span>

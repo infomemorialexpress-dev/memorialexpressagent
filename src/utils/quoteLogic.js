@@ -34,6 +34,26 @@ export function formatMoney(amount) {
   });
 }
 
+// Catalog item (merchandise & add-ons) formatting: displays "INCL" when price is 0
+export function formatCatalogPrice(amount) {
+  if (typeof amount === 'string') {
+    const trimmed = amount.trim().toLowerCase();
+    if (trimmed === 'incl' || trimmed === 'included') {
+      return 'INCL';
+    }
+  }
+  if (
+    amount !== null &&
+    amount !== undefined &&
+    amount !== '' &&
+    !isNaN(Number(amount)) &&
+    Number(amount) === 0
+  ) {
+    return 'INCL';
+  }
+  return formatMoney(amount);
+}
+
 // Translation helper
 const sortedTranslations = [...(TRANSLATIONS || [])].sort((a, b) => b[0].length - a[0].length);
 
@@ -419,14 +439,14 @@ export function calculateQuote(q, db) {
   let added = [];
   if (Array.isArray(q.nonGuaranteedAddons) && q.nonGuaranteedAddons.length > 0) {
     added = q.nonGuaranteedAddons
-      .filter(a => Number(a.totalPrice ?? a.price ?? 0) > 0 && !String(a.id || '').startsWith('western_') && !isGuaranteedItem(a))
+      .filter(a => Number(a.totalPrice ?? a.price ?? 0) >= 0 && !String(a.id || '').startsWith('western_') && !isGuaranteedItem(a))
       .map(a => {
         const qty = Number(a.quantity) || 1;
         const unit = Number(a.unitPrice ?? (a.quantity ? (a.price / a.quantity) : a.price) ?? 0);
         const total = Number(a.totalPrice ?? (qty * unit) ?? a.price ?? 0);
         return {
           id: a.id,
-          name: qty > 1 ? `${a.name} (${qty} × ${formatMoney(unit)})` : a.name,
+          name: qty > 1 ? `${a.name} (${qty} × ${formatCatalogPrice(unit)})` : a.name,
           price: total,
           unitPrice: unit,
           quantity: qty,
@@ -436,14 +456,14 @@ export function calculateQuote(q, db) {
       });
   } else if (Array.isArray(q.selectedAddonObjects) && q.selectedAddonObjects.length > 0) {
     added = q.selectedAddonObjects
-      .filter(a => Number(a.totalPrice ?? a.price ?? 0) > 0 && !String(a.id || '').startsWith('western_') && !isGuaranteedItem(a))
+      .filter(a => Number(a.totalPrice ?? a.price ?? 0) >= 0 && !String(a.id || '').startsWith('western_') && !isGuaranteedItem(a))
       .map(a => {
         const qty = Number(a.quantity) || 1;
         const unit = Number(a.unitPrice ?? (a.quantity ? (a.price / a.quantity) : a.price) ?? 0);
         const total = Number(a.totalPrice ?? (qty * unit) ?? a.price ?? 0);
         return {
           id: a.id,
-          name: qty > 1 ? `${a.name} (${qty} × ${formatMoney(unit)})` : a.name,
+          name: qty > 1 ? `${a.name} (${qty} × ${formatCatalogPrice(unit)})` : a.name,
           price: total,
           unitPrice: unit,
           quantity: qty,
@@ -614,12 +634,12 @@ export function calculateQuote(q, db) {
     selectedBranch: q.selectedBranch || null,
     chapelExtra,
     chapelSurcharge: chapelExtra,
-    visitationHours: q.selectedServiceObject?.visitationHours !== undefined
+    visitationHours: (q.selectedServiceObject?.visitationHours !== undefined && q.selectedServiceObject?.visitationHours !== null && q.selectedServiceObject?.visitationHours !== '' && !isNaN(Number(q.selectedServiceObject.visitationHours)))
       ? Number(q.selectedServiceObject.visitationHours)
-      : (pkgFromDb?.visitationHours ?? 3),
-    transferMiles: q.selectedServiceObject?.transferMiles !== undefined
+      : ((pkgFromDb?.visitationHours !== undefined && pkgFromDb?.visitationHours !== null && pkgFromDb?.visitationHours !== '' && !isNaN(Number(pkgFromDb.visitationHours))) ? Number(pkgFromDb.visitationHours) : 3),
+    transferMiles: (q.selectedServiceObject?.transferMiles !== undefined && q.selectedServiceObject?.transferMiles !== null && q.selectedServiceObject?.transferMiles !== '' && !isNaN(Number(q.selectedServiceObject.transferMiles)))
       ? Number(q.selectedServiceObject.transferMiles)
-      : (pkgFromDb?.transferMiles ?? 25),
+      : ((pkgFromDb?.transferMiles !== undefined && pkgFromDb?.transferMiles !== null && pkgFromDb?.transferMiles !== '' && !isNaN(Number(pkgFromDb.transferMiles))) ? Number(pkgFromDb.transferMiles) : 25),
     addedAddons: added
   };
 }
@@ -668,29 +688,38 @@ export function getItemizedServicesList(packageObj, calculation, isEs = false, s
   const chapel = selectedChapelArg || calculation?.selectedChapel || null;
   const chapelSurcharge = Number(chapel?.surcharge) || 0;
 
-  const hours = packageObj?.visitationHours !== undefined
-    ? Number(packageObj.visitationHours)
-    : (calculation?.packageData?.visitationHours !== undefined
-      ? Number(calculation.packageData.visitationHours)
-      : (calculation?.serviceObj?.visitationHours !== undefined
-        ? Number(calculation.serviceObj.visitationHours)
-        : (calculation?.visitationHours !== undefined
-          ? Number(calculation.visitationHours)
-          : 3)));
+  const resolveNumericMeta = (candidates, fallbackVal) => {
+    for (const val of candidates) {
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+        return Number(val);
+      }
+    }
+    return fallbackVal;
+  };
+
+  const hours = resolveNumericMeta(
+    [
+      packageObj?.visitationHours,
+      calculation?.packageData?.visitationHours,
+      calculation?.serviceObj?.visitationHours,
+      calculation?.visitationHours,
+    ],
+    3
+  );
 
   const visitationDesc = isEs
     ? `Velación (${hours} horas)`
     : `Visitation (${hours} hours)`;
 
-  const miles = packageObj?.transferMiles !== undefined
-    ? Number(packageObj.transferMiles)
-    : (calculation?.packageData?.transferMiles !== undefined
-      ? Number(calculation.packageData.transferMiles)
-      : (calculation?.serviceObj?.transferMiles !== undefined
-        ? Number(calculation.serviceObj.transferMiles)
-        : (calculation?.transferMiles !== undefined
-          ? Number(calculation.transferMiles)
-          : 25)));
+  const miles = resolveNumericMeta(
+    [
+      packageObj?.transferMiles,
+      calculation?.packageData?.transferMiles,
+      calculation?.serviceObj?.transferMiles,
+      calculation?.transferMiles,
+    ],
+    25
+  );
 
   const transferDesc = isEs
     ? `Traslado del difunto (${miles} millas)`

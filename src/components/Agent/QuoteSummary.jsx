@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
-import { formatMoney, SERVICES, getItemizedServicesList, getLocalizedText } from '../../utils/quoteLogic.js';
+import { formatMoney, formatCatalogPrice, SERVICES, getItemizedServicesList, getLocalizedText } from '../../utils/quoteLogic.js';
 import { generateFSAPdf } from '../../utils/FSA_Generator.js';
 import { QuoteSummarySkeleton } from '../common/SkeletonLoader.jsx';
 
@@ -126,7 +126,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
       const aPrice = typeof addon === 'object' && addon.price !== undefined ? Number(addon.price) : 0;
       const aName = typeof addon === 'string' ? addon : (addon.name || '');
       const aId = typeof addon === 'object' && addon.id ? String(addon.id) : '';
-      if (aPrice <= 0 && aId !== 'music') return false;
+      if (aPrice < 0) return false;
       if (aName.startsWith('western_') || aName.startsWith('felipe_')) return false;
       if (aId.startsWith('western_') || aId.startsWith('felipe_')) return false;
       if (isGuaranteedItem(addon)) return false;
@@ -577,7 +577,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {hasSelectedCasket && dynamicCasketPrice > 0 ? formatMoney(dynamicCasketPrice) : (hasSelectedCasket ? '$0' : '')}
+                      {hasSelectedCasket ? formatCatalogPrice(dynamicCasketPrice) : ''}
                     </td>
                   </tr>
                   <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
@@ -670,7 +670,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                   {guaranteedAddons.length > 0 ? (
                     guaranteedAddons.map((item, idx) => {
                       const baseName = getLocalizedText(item, 'name', lang) || item.name;
-                      const iName = item.quantity > 1 ? `${baseName} (${item.quantity} × ${formatMoney(item.unitPrice)})` : baseName;
+                      const iName = item.quantity > 1 ? `${baseName} (${item.quantity} × ${formatCatalogPrice(item.unitPrice)})` : baseName;
                       const iPrice = Number(item.totalPrice ?? item.price ?? 0);
                       return (
                         <tr key={idx} style={{ borderBottom: '1px solid #cbd5e1' }}>
@@ -687,7 +687,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {formatMoney(iPrice)}
+                            {formatCatalogPrice(iPrice)}
                           </td>
                         </tr>
                       );
@@ -844,7 +844,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                                 whiteSpace: 'nowrap',
                               }}
                             >
-                              {formatMoney(aPrice)}
+                              {formatCatalogPrice(aPrice)}
                             </td>
                           </tr>
                         );
@@ -862,7 +862,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {formatMoney(item.price)}
+                            {formatCatalogPrice(item.price)}
                           </td>
                         </tr>
                       ))}

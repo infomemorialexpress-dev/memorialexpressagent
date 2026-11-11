@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
-import { formatMoney, isEligibleCasket, getLocalizedText } from '../../utils/quoteLogic.js';
+import { formatMoney, formatCatalogPrice, isEligibleCasket, getLocalizedText } from '../../utils/quoteLogic.js';
 import { CasketCardSkeleton } from '../common/SkeletonLoader.jsx';
 import ShimmerImage from '../common/ShimmerImage.jsx';
 
@@ -187,8 +187,10 @@ export default function ChooseCasket({ onBack, onContinue }) {
         const backendItems = rawItems
           .filter((item) => {
             if (!item) return false;
-            const price = item?.listPrice !== null && item?.listPrice !== undefined ? Number(item.listPrice) : Number(item?.price || 0);
-            if (!(price > 0) || item?.isActive === false) return false;
+            const rawPrice = item?.listPrice !== null && item?.listPrice !== undefined ? item.listPrice : item?.price;
+            if (rawPrice === null || rawPrice === undefined || rawPrice === '' || item?.isActive === false) return false;
+            const price = Number(rawPrice);
+            if (isNaN(price) || price < 0) return false;
 
             // Strict filtering based on assignedPackages:
             // If a casket has assignedPackages mapped to it, it MUST NOT be displayed unless one of those package IDs matches the currently selectedPackageId
@@ -645,15 +647,33 @@ export default function ChooseCasket({ onBack, onContinue }) {
                         marginBottom: isSelected ? '8px' : '0'
                       }}
                     >
-                      <span
-                        style={{
-                          fontSize: '19px',
-                          fontWeight: 800,
-                          color: '#183655'
-                        }}
-                      >
-                        {formatMoney(currentPrice)}
-                      </span>
+                      {Number(currentPrice) === 0 ? (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '3px 10px',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            fontWeight: 800,
+                            letterSpacing: '0.6px',
+                            backgroundColor: '#ecfdf5',
+                            color: '#047857',
+                            border: '1px solid #a7f3d0'
+                          }}
+                        >
+                          INCL
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: '19px',
+                            fontWeight: 800,
+                            color: '#183655'
+                          }}
+                        >
+                          {formatMoney(currentPrice)}
+                        </span>
+                      )}
 
                       <span
                         style={{
@@ -1294,7 +1314,7 @@ export default function ChooseCasket({ onBack, onContinue }) {
                 }}
               >
                 {lang === 'es' ? 'Seleccionar este Ataúd' : 'Select this Casket'} (
-                {formatMoney(zoomModalCasket.listPrice ?? zoomModalCasket.price ?? 0)})
+                {formatCatalogPrice(zoomModalCasket.listPrice ?? zoomModalCasket.price ?? 0)})
               </Button>
             </div>
           </div>

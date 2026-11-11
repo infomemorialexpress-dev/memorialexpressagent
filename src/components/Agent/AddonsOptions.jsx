@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
-import { formatMoney, getLocalizedText } from '../../utils/quoteLogic.js';
+import { formatMoney, formatCatalogPrice, getLocalizedText } from '../../utils/quoteLogic.js';
 import { AddonRowSkeleton } from '../common/SkeletonLoader.jsx';
 
 export const isGuaranteedAddonItem = (item) => {
@@ -99,6 +99,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
   const [addonsList, setAddonsList] = useState([]);
   const [isSyncing, setIsSyncing] = useState(true);
   const [error, setError] = useState(null);
+  const [editingZeroAddonId, setEditingZeroAddonId] = useState(null);
 
   // Fetch available add-ons from GET /api/catalog/location/${funeralHomeId}?type=ADDON&onlyActive=true
   useEffect(() => {
@@ -480,6 +481,9 @@ export default function AddonsOptions({ onBack, onContinue }) {
     const totalPrice = unitPrice * qty;
     const taxAmount = isGuaranteed ? Math.round(totalPrice * 0.11 * 100) / 100 : 0;
     const isMandatory = Boolean(addon.isMandatory);
+    const displayedPrice = (customPrices && customPrices[addon.id] !== undefined) ? customPrices[addon.id] : unitPrice;
+    const isZeroPrice = displayedPrice !== '' && displayedPrice !== null && displayedPrice !== undefined && !isNaN(Number(displayedPrice)) && Number(displayedPrice) === 0;
+    const isEditingZero = editingZeroAddonId === addon.id;
 
     // SPECIAL DESTINATION-BASED AIRFARE CARD (matches image_6c89c3.png)
     if (addon.hasDestinations) {
@@ -847,25 +851,142 @@ export default function AddonsOptions({ onBack, onContinue }) {
               </button>
             </div>
 
-            {/* Editable Numeric Price Input Column */}
+            {/* Editable Numeric Price Input Column (or INCL badge when $0) */}
             <div style={{ textAlign: 'right', minWidth: '105px' }} onClick={(e) => e.stopPropagation()}>
+              {isZeroPrice && !isEditingZero ? (
+                <div
+                  onClick={() => {
+                    if (!addon.isFixedPrice) {
+                      setEditingZeroAddonId(addon.id);
+                    }
+                  }}
+                  title={addon.isFixedPrice
+                    ? (isEs ? 'Incluido ($0 fijo)' : 'Included (fixed $0)')
+                    : (isEs ? 'Incluido ($0) — clic para editar precio' : 'Included ($0) — click to edit price')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#ecfdf5',
+                    border: '1.5px solid #a7f3d0',
+                    color: '#047857',
+                    borderRadius: '8px',
+                    padding: '6px 14px',
+                    fontSize: '14px',
+                    fontWeight: 800,
+                    letterSpacing: '0.6px',
+                    cursor: addon.isFixedPrice ? 'default' : 'pointer',
+                  }}
+                >
+                  <span>INCL</span>
+                  {!addon.isFixedPrice && <span style={{ fontSize: '11px', opacity: 0.75 }}>✏️</span>}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    backgroundColor: '#ffffff',
+                    border: isGuaranteed ? '1.5px solid #16a34a' : '1.5px solid #183655',
+                    borderRadius: '8px',
+                    padding: '4px 8px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                  }}
+                >
+                  <span style={{ fontWeight: 800, color: isGuaranteed ? '#15803d' : '#183655', fontSize: '15px' }}>$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    autoFocus={isEditingZero}
+                    readOnly={Boolean(addon.isFixedPrice)}
+                    value={(customPrices && customPrices[addon.id] !== undefined) ? customPrices[addon.id] : unitPrice}
+                    onWheel={(e) => e.target.blur()}
+                    onKeyDown={(e) => {
+                      if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                        e.preventDefault();
+                      }
+                    }}
+                    onChange={(e) => handlePriceChange(addon.id, e.target.value)}
+                    onBlur={() => {
+                      if (isEditingZero) setEditingZeroAddonId(null);
+                    }}
+                    style={{
+                      width: '78px',
+                      border: 'none',
+                      outline: 'none',
+                      fontSize: '16px',
+                      fontWeight: 800,
+                      color: isGuaranteed ? '#15803d' : '#183655',
+                      textAlign: 'right',
+                      backgroundColor: 'transparent'
+                    }}
+                  />
+                </div>
+              )}
+
+              {qty > 1 && (
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', marginTop: '3px', whiteSpace: 'nowrap' }}>
+                  Total: {isZeroPrice ? 'INCL' : formatCatalogPrice(totalPrice)}
+                </div>
+              )}
+              {isGuaranteed && !isZeroPrice && (
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', marginTop: '2px', whiteSpace: 'nowrap' }}>
+                  + {formatMoney(taxAmount)} (11% tax)
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Unchecked State: Editable numeric price input column (or INCL badge when $0) */
+          <div style={{ textAlign: 'right', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+            {isZeroPrice && !isEditingZero ? (
+              <div
+                onClick={() => {
+                  if (!addon.isFixedPrice) {
+                    setEditingZeroAddonId(addon.id);
+                  }
+                }}
+                title={addon.isFixedPrice
+                  ? (isEs ? 'Incluido ($0 fijo)' : 'Included (fixed $0)')
+                  : (isEs ? 'Incluido ($0) — clic para editar precio' : 'Included ($0) — click to edit price')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                  color: '#047857',
+                  borderRadius: '8px',
+                  padding: '5px 14px',
+                  fontSize: '13.5px',
+                  fontWeight: 800,
+                  letterSpacing: '0.6px',
+                  cursor: addon.isFixedPrice ? 'default' : 'pointer',
+                }}
+              >
+                <span>INCL</span>
+                {!addon.isFixedPrice && <span style={{ fontSize: '11px', opacity: 0.75 }}>✏️</span>}
+              </div>
+            ) : (
               <div
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '3px',
                   backgroundColor: '#ffffff',
-                  border: isGuaranteed ? '1.5px solid #16a34a' : '1.5px solid #183655',
+                  border: '1px solid #cbd5e1',
                   borderRadius: '8px',
                   padding: '4px 8px',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                 }}
               >
-                <span style={{ fontWeight: 800, color: isGuaranteed ? '#15803d' : '#183655', fontSize: '15px' }}>$</span>
+                <span style={{ fontWeight: 700, color: '#64748b', fontSize: '14px' }}>$</span>
                 <input
                   type="number"
                   min="0"
                   step="1"
+                  autoFocus={isEditingZero}
                   readOnly={Boolean(addon.isFixedPrice)}
                   value={(customPrices && customPrices[addon.id] !== undefined) ? customPrices[addon.id] : unitPrice}
                   onWheel={(e) => e.target.blur()}
@@ -875,72 +996,23 @@ export default function AddonsOptions({ onBack, onContinue }) {
                     }
                   }}
                   onChange={(e) => handlePriceChange(addon.id, e.target.value)}
+                  onBlur={() => {
+                    if (isEditingZero) setEditingZeroAddonId(null);
+                  }}
                   style={{
                     width: '78px',
                     border: 'none',
                     outline: 'none',
-                    fontSize: '16px',
-                    fontWeight: 800,
-                    color: isGuaranteed ? '#15803d' : '#183655',
+                    fontSize: '15.5px',
+                    fontWeight: 700,
+                    color: '#334155',
                     textAlign: 'right',
                     backgroundColor: 'transparent'
                   }}
                 />
               </div>
-
-              {qty > 1 && (
-                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', marginTop: '3px', whiteSpace: 'nowrap' }}>
-                  Total: {formatMoney(totalPrice)}
-                </div>
-              )}
-              {isGuaranteed && (
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', marginTop: '2px', whiteSpace: 'nowrap' }}>
-                  + {formatMoney(taxAmount)} (11% tax)
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* Unchecked State: Editable numeric price input column (as highlighted in reference image) */
-          <div style={{ textAlign: 'right', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '3px',
-                backgroundColor: '#ffffff',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                padding: '4px 8px',
-              }}
-            >
-              <span style={{ fontWeight: 700, color: '#64748b', fontSize: '14px' }}>$</span>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                readOnly={Boolean(addon.isFixedPrice)}
-                value={(customPrices && customPrices[addon.id] !== undefined) ? customPrices[addon.id] : unitPrice}
-                onWheel={(e) => e.target.blur()}
-                onKeyDown={(e) => {
-                  if (e.key === '-' || e.key === 'e' || e.key === 'E') {
-                    e.preventDefault();
-                  }
-                }}
-                onChange={(e) => handlePriceChange(addon.id, e.target.value)}
-                style={{
-                  width: '78px',
-                  border: 'none',
-                  outline: 'none',
-                  fontSize: '15.5px',
-                  fontWeight: 700,
-                  color: '#334155',
-                  textAlign: 'right',
-                  backgroundColor: 'transparent'
-                }}
-              />
-            </div>
-            {isGuaranteed && (
+            )}
+            {isGuaranteed && !isZeroPrice && (
               <div style={{ fontSize: '11px', fontWeight: 600, color: '#16a34a', marginTop: '2px' }}>
                 + 11% tax ({formatMoney(Math.round(unitPrice * 0.11 * 100) / 100)})
               </div>

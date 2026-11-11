@@ -16,6 +16,7 @@ import SelectDropdown from '../../components/common/SelectDropdown.jsx';
 import {
   SERVICES,
   formatMoney,
+  formatCatalogPrice,
   isShipOut
 } from '../../utils/quoteLogic.js';
 
@@ -258,7 +259,7 @@ export default function AgentQuoteFunnel() {
                   addToast(lang === 'es' ? 'Ataúd seleccionado.' : 'Casket selected.', 'success');
                 }}
               >
-                {lang === 'es' ? 'Seleccionar este Ataúd' : 'Select this Casket'} ({formatMoney(zoomedCasket.price)})
+                {lang === 'es' ? 'Seleccionar este Ataúd' : 'Select this Casket'} ({formatCatalogPrice(zoomedCasket.price)})
               </Button>
             </div>
           </div>
