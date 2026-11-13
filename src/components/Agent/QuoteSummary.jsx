@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
-import { formatMoney, formatCatalogPrice, SERVICES, getItemizedServicesList, getLocalizedText } from '../../utils/quoteLogic.js';
+import { formatMoney, formatCurrency, formatCatalogPrice, SERVICES, getItemizedServicesList, getLocalizedText } from '../../utils/quoteLogic.js';
 import { generateFSAPdf } from '../../utils/FSA_Generator.js';
 import { QuoteSummarySkeleton } from '../common/SkeletonLoader.jsx';
 
@@ -577,7 +577,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {hasSelectedCasket ? formatCatalogPrice(dynamicCasketPrice) : ''}
+                      {hasSelectedCasket ? (Number(dynamicCasketPrice) === 0 ? 'Incl' : formatCurrency(dynamicCasketPrice)) : ''}
                     </td>
                   </tr>
                   <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
@@ -670,8 +670,13 @@ export default function QuoteSummary({ onBack, onContinue }) {
                   {guaranteedAddons.length > 0 ? (
                     guaranteedAddons.map((item, idx) => {
                       const baseName = getLocalizedText(item, 'name', lang) || item.name;
-                      const iName = item.quantity > 1 ? `${baseName} (${item.quantity} × ${formatCatalogPrice(item.unitPrice)})` : baseName;
-                      const iPrice = Number(item.totalPrice ?? item.price ?? 0);
+                      const rawUnitPrice = item.unitPrice !== undefined ? item.unitPrice : item.price;
+                      const unitNum = Number(rawUnitPrice ?? 0);
+                      const unitDisplay = unitNum === 0 ? 'Incl' : formatCurrency(unitNum);
+                      const iName = item.quantity > 1 ? `${baseName} (${item.quantity} × ${unitDisplay})` : baseName;
+                      const rawPrice = item.totalPrice !== undefined ? item.totalPrice : item.price;
+                      const iPrice = Number(rawPrice ?? 0);
+                      const priceDisplay = iPrice === 0 ? 'Incl' : formatCurrency(iPrice);
                       return (
                         <tr key={idx} style={{ borderBottom: '1px solid #cbd5e1' }}>
                           <td style={{ padding: '3px 6px', color: '#111827' }}>
@@ -687,7 +692,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {formatCatalogPrice(iPrice)}
+                            {priceDisplay}
                           </td>
                         </tr>
                       );

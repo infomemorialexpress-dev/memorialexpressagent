@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { formatMoney, formatCatalogPrice, getItemizedServicesList, t, getLocalizedText } from './quoteLogic.js';
+import { formatMoney, formatCurrency, formatCatalogPrice, getItemizedServicesList, t, getLocalizedText } from './quoteLogic.js';
 
 function getTranslatedServiceTitle(title, isEs) {
   if (!isEs) return title;
@@ -374,9 +374,16 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const guaranteedMerchRows = guaranteedAddons.length > 0
     ? guaranteedAddons.map(item => {
         const translatedName = isEs ? (getLocalizedText(item, 'name', 'es') || t(item.name, 'es')) : (item.name || '');
+        const rawUnitPrice = item.unitPrice !== undefined ? item.unitPrice : item.price;
+        const unitNum = Number(rawUnitPrice ?? 0);
+        const unitDisplay = unitNum === 0 ? 'Incl' : formatCurrency(unitNum);
+        const labelText = item.quantity > 1 ? `${translatedName} (${item.quantity} × ${unitDisplay})` : translatedName;
+        const rawPrice = item.totalPrice !== undefined ? item.totalPrice : item.price;
+        const itemPrice = Number(rawPrice ?? 0);
+        const priceVal = itemPrice === 0 ? 'Incl' : formatCurrency(itemPrice);
         return {
-          label: item.quantity > 1 ? `${translatedName} (${item.quantity} × ${formatCatalogPrice(item.unitPrice)})` : translatedName,
-          val: formatCatalogPrice(item.totalPrice ?? item.price),
+          label: labelText,
+          val: priceVal,
           isBoldVal: true,
         };
       })
@@ -386,8 +393,9 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
         isItalic: true,
       }];
 
+  const casketPriceNum = Number(dynamicCasketPrice ?? 0);
   const casketPriceVal = hasSelectedCasket
-    ? formatCatalogPrice(dynamicCasketPrice)
+    ? (casketPriceNum === 0 ? 'Incl' : formatCurrency(casketPriceNum))
     : '';
 
   const merchRows = [
@@ -414,10 +422,10 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
     doc.setTextColor(mRow.isItalic ? 100 : 0);
     doc.text(mRow.label, rightX + 4, rightY + 10, { maxWidth: colWidth - priceColW - 6 });
 
-    if (mRow.val) {
+    if (mRow.val !== undefined && mRow.val !== null && mRow.val !== '') {
       doc.setFont('helvetica', mRow.isBold || mRow.isBoldVal ? 'bold' : 'normal');
       doc.setTextColor(0);
-      doc.text(mRow.val, rightX + colWidth - 4, rightY + 10, { align: 'right' });
+      doc.text(String(mRow.val), rightX + colWidth - 4, rightY + 10, { align: 'right' });
     }
 
     doc.setDrawColor(...borderLight);

@@ -34,12 +34,14 @@ export function formatMoney(amount) {
   });
 }
 
-// Catalog item (merchandise & add-ons) formatting: displays "INCL" when price is 0
+export const formatCurrency = formatMoney;
+
+// Catalog item (merchandise & add-ons) formatting: displays "Incl" when price is 0
 export function formatCatalogPrice(amount) {
   if (typeof amount === 'string') {
     const trimmed = amount.trim().toLowerCase();
     if (trimmed === 'incl' || trimmed === 'included') {
-      return 'INCL';
+      return 'Incl';
     }
   }
   if (
@@ -49,7 +51,7 @@ export function formatCatalogPrice(amount) {
     !isNaN(Number(amount)) &&
     Number(amount) === 0
   ) {
-    return 'INCL';
+    return 'Incl';
   }
   return formatMoney(amount);
 }
