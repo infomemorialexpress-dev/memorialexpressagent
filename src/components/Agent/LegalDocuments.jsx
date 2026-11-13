@@ -381,15 +381,15 @@ export default function LegalDocuments({ onBack, onContinue }) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span
                     style={{
-                      backgroundColor: '#fee2e2',
-                      color: '#dc2626',
+                      backgroundColor: form.fileUrl ? '#fee2e2' : (form.externalLink ? '#eff6ff' : '#f1f5f9'),
+                      color: form.fileUrl ? '#dc2626' : (form.externalLink ? '#2563eb' : '#475569'),
                       fontWeight: 800,
                       fontSize: '11px',
                       padding: '3px 7px',
                       borderRadius: '5px',
                     }}
                   >
-                    PDF
+                    {form.fileUrl ? 'PDF' : (form.externalLink ? 'LINK' : 'DOC')}
                   </span>
                   {isSelected ? (
                     <span
@@ -415,23 +415,74 @@ export default function LegalDocuments({ onBack, onContinue }) {
                   {form.formTitle}
                 </div>
 
-                {form.fileUrl || form.url ? (
-                  <div style={{ fontSize: '11.5px', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {form.note && (
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      color: '#475569',
+                      lineHeight: 1.4,
+                      backgroundColor: isSelected ? '#e0f2fe' : '#f8fafc',
+                      padding: '5px 8px',
+                      borderRadius: '6px',
+                      borderLeft: '3px solid #3b82f6',
+                    }}
+                    title={form.note}
+                  >
+                    ℹ️ {form.note}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginTop: '2px' }}>
+                  {form.fileUrl || form.url ? (
                     <a
                       href={form.fileUrl || form.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      style={{ color: '#2563eb', textDecoration: 'underline' }}
+                      style={{
+                        fontSize: '11.5px',
+                        color: '#2563eb',
+                        textDecoration: 'underline',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
                     >
-                      {isEs ? 'Ver PDF Original ↗' : 'Preview Original PDF ↗'}
+                      📄 {isEs ? 'Ver PDF Original ↗' : 'Preview Original PDF ↗'}
                     </a>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>
-                    {isEs ? 'Plantilla oficial estandarizada' : 'Official standardized release document'}
-                  </div>
-                )}
+                  ) : (
+                    !form.externalLink && (
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>
+                        {isEs ? 'Plantilla oficial estandarizada' : 'Official standardized release document'}
+                      </div>
+                    )
+                  )}
+
+                  {form.externalLink && (
+                    <a
+                      href={form.externalLink.startsWith('http') ? form.externalLink : `https://${form.externalLink}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '11.5px',
+                        fontWeight: 650,
+                        color: '#1d4ed8',
+                        backgroundColor: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: '6px',
+                        padding: '3px 8px',
+                        textDecoration: 'none',
+                      }}
+                      title={form.externalLink}
+                    >
+                      🔗 {isEs ? 'Enlace Externo ↗' : 'External Link ↗'}
+                    </a>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -462,7 +513,31 @@ export default function LegalDocuments({ onBack, onContinue }) {
           ← {isEs ? 'Volver a Cotización' : 'Back to Quote Summary'}
         </Button>
 
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {selectedForm?.externalLink && (
+            <a
+              href={selectedForm.externalLink.startsWith('http') ? selectedForm.externalLink : `https://${selectedForm.externalLink}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '12px 20px',
+                fontSize: '14px',
+                fontWeight: 650,
+                borderRadius: '8px',
+                backgroundColor: '#eff6ff',
+                color: '#1d4ed8',
+                border: '1px solid #bfdbfe',
+                textDecoration: 'none',
+              }}
+            >
+              <span>🔗</span>
+              <span>{isEs ? 'Abrir Enlace Externo ↗' : 'Open External Link ↗'}</span>
+            </a>
+          )}
+
           <Button
             variant="primary"
             onClick={handleDownloadDocument}
