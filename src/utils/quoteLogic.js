@@ -636,7 +636,10 @@ export function calculateQuote(q, db) {
     chapelSurcharge: chapelExtra,
     visitationHours: (q.selectedServiceObject?.visitationHours !== undefined && q.selectedServiceObject?.visitationHours !== null && q.selectedServiceObject?.visitationHours !== '' && !isNaN(Number(q.selectedServiceObject.visitationHours)))
       ? Number(q.selectedServiceObject.visitationHours)
-      : ((pkgFromDb?.visitationHours !== undefined && pkgFromDb?.visitationHours !== null && pkgFromDb?.visitationHours !== '' && !isNaN(Number(pkgFromDb.visitationHours))) ? Number(pkgFromDb.visitationHours) : 3),
+      : ((pkgFromDb?.visitationHours !== undefined && pkgFromDb?.visitationHours !== null && pkgFromDb?.visitationHours !== '' && !isNaN(Number(pkgFromDb.visitationHours))) ? Number(pkgFromDb.visitationHours) : 0),
+    funeralServiceHours: (q.selectedServiceObject?.funeralServiceHours !== undefined && q.selectedServiceObject?.funeralServiceHours !== null && q.selectedServiceObject?.funeralServiceHours !== '' && !isNaN(Number(q.selectedServiceObject.funeralServiceHours)))
+      ? Number(q.selectedServiceObject.funeralServiceHours)
+      : ((pkgFromDb?.funeralServiceHours !== undefined && pkgFromDb?.funeralServiceHours !== null && pkgFromDb?.funeralServiceHours !== '' && !isNaN(Number(pkgFromDb.funeralServiceHours))) ? Number(pkgFromDb.funeralServiceHours) : 0),
     transferMiles: (q.selectedServiceObject?.transferMiles !== undefined && q.selectedServiceObject?.transferMiles !== null && q.selectedServiceObject?.transferMiles !== '' && !isNaN(Number(q.selectedServiceObject.transferMiles)))
       ? Number(q.selectedServiceObject.transferMiles)
       : ((pkgFromDb?.transferMiles !== undefined && pkgFromDb?.transferMiles !== null && pkgFromDb?.transferMiles !== '' && !isNaN(Number(pkgFromDb.transferMiles))) ? Number(pkgFromDb.transferMiles) : 25),
@@ -688,7 +691,7 @@ export function getItemizedServicesList(packageObj, calculation, isEs = false, s
   const chapel = selectedChapelArg || calculation?.selectedChapel || null;
   const chapelSurcharge = Number(chapel?.surcharge) || 0;
 
-  const resolveNumericMeta = (candidates, fallbackVal) => {
+  const resolveNumericMeta = (candidates, fallbackVal = 0) => {
     for (const val of candidates) {
       if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
         return Number(val);
@@ -704,12 +707,34 @@ export function getItemizedServicesList(packageObj, calculation, isEs = false, s
       calculation?.serviceObj?.visitationHours,
       calculation?.visitationHours,
     ],
-    3
+    0
   );
 
-  const visitationDesc = isEs
-    ? `Velación (${hours} horas)`
-    : `Visitation (${hours} hours)`;
+  const visitationDesc = (hours !== undefined && hours !== null && Number(hours) > 0)
+    ? (isEs ? `Velación (${Number(hours)} horas)` : `Visitation (${Number(hours)} hours)`)
+    : (isEs ? 'Velación' : 'Visitation');
+
+  const funeralHours = resolveNumericMeta(
+    [
+      packageObj?.funeralServiceHours,
+      packageObj?.funeralHours,
+      packageObj?.serviceHours,
+      calculation?.packageData?.funeralServiceHours,
+      calculation?.packageData?.funeralHours,
+      calculation?.packageData?.serviceHours,
+      calculation?.serviceObj?.funeralServiceHours,
+      calculation?.serviceObj?.funeralHours,
+      calculation?.serviceObj?.serviceHours,
+      calculation?.funeralServiceHours,
+      calculation?.funeralHours,
+      calculation?.serviceHours,
+    ],
+    0
+  );
+
+  const funeralServiceDesc = (funeralHours !== undefined && funeralHours !== null && Number(funeralHours) > 0)
+    ? (isEs ? `Servicio funerario / memorial (${Number(funeralHours)} horas)` : `Funeral/memorial service (${Number(funeralHours)} hours)`)
+    : (isEs ? 'Servicio funerario / memorial' : 'Funeral/memorial service');
 
   const miles = resolveNumericMeta(
     [
@@ -806,7 +831,7 @@ export function getItemizedServicesList(packageObj, calculation, isEs = false, s
     formatRow('embalming', isEs ? 'Embalsamamiento / refrigeración' : 'Embalming / refrigeration', itemized.embalming, embalming),
     formatRow('otherPreparation', isEs ? 'Otra preparación' : 'Other preparation', itemized.otherPreparation, otherPreparation),
     formatRow('visitation', visitationDesc, itemized.visitation, visitation),
-    formatRow('funeralService', isEs ? 'Servicio funerario / memorial' : 'Funeral/memorial service', itemized.funeralService, funeralService),
+    formatRow('funeralService', funeralServiceDesc, itemized.funeralService, funeralService),
     formatRow('funeralCoach', isEs ? 'Carroza funeraria' : 'Funeral coach', itemized.funeralCoach, funeralCoach),
     formatRow('utilityVehicles', isEs ? 'Vehículos utilitarios / otros' : 'Utility vehicles / other', itemized.utilityVehicles, utilityVehicles),
     ...customOtherRows,
