@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAgentQuoteDb } from '../services/agent/agentService.js';
 import { calculateQuote, isCremation } from '../utils/quoteLogic.js';
 import api from '../services/api.js';
@@ -72,10 +72,12 @@ export function QuoteProvider({ children }) {
     }
   }, []);
 
-  // Fetch real funeral homes from Backend API
+  // Fetch real funeral homes from Backend API with concurrency guard
+  const isFetchingHomesRef = useRef(false);
   const fetchFuneralHomes = useCallback(async () => {
+    if (isFetchingHomesRef.current) return;
+    isFetchingHomesRef.current = true;
     setIsLoadingHomes(true);
-    setDbError(null);
     try {
       const response = await api.get('/funeral-homes?onlyActive=true');
       const homes = Array.isArray(response.data) ? response.data : [];
@@ -84,14 +86,19 @@ export function QuoteProvider({ children }) {
         ...prev,
         homes
       }));
+      setDbError(null);
       return homes;
     } catch (err) {
       console.error('[QuoteContext] Could not fetch /funeral-homes from backend:', err);
-      setFuneralHomes([]);
-      setDbError(err.userMessage || 'Could not connect to database to load funeral homes.');
+      if (err.response?.status === 429) {
+        setDbError('Rate limit exceeded (429). Please wait a few seconds and try again.');
+      } else {
+        setDbError(err.userMessage || 'Could not connect to database to load funeral homes.');
+      }
       return [];
     } finally {
       setIsLoadingHomes(false);
+      isFetchingHomesRef.current = false;
     }
   }, []);
 
@@ -99,10 +106,12 @@ export function QuoteProvider({ children }) {
     fetchFuneralHomes();
   }, [fetchFuneralHomes]);
 
-  // Fetch live catalog snapshot
+  // Fetch live catalog snapshot with concurrency guard
+  const isFetchingDbRef = useRef(false);
   const loadAgentCatalog = useCallback(async () => {
+    if (isFetchingDbRef.current) return;
+    isFetchingDbRef.current = true;
     setIsLoadingDb(true);
-    setDbError(null);
     try {
       const res = await fetchAgentQuoteDb();
       if (res.success && res.db) {
@@ -110,12 +119,18 @@ export function QuoteProvider({ children }) {
           ...res.db,
           homes: prev.homes.length > 0 ? prev.homes : res.db.homes
         }));
+        setDbError(null);
       }
     } catch (err) {
       console.error('[QuoteContext] Failed to load agent catalog:', err);
-      setDbError(err.message || 'Failed to load catalog from database');
+      if (err.response?.status === 429 || err.status === 429) {
+        setDbError('Rate limit exceeded (429). Please wait a few seconds and try again.');
+      } else {
+        setDbError(err.message || 'Failed to load catalog from database');
+      }
     } finally {
       setIsLoadingDb(false);
+      isFetchingDbRef.current = false;
     }
   }, []);
 

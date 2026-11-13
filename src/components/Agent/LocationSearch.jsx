@@ -129,20 +129,6 @@ export default function LocationSearch({ onContinue }) {
     }
   }, [quote.home]);
 
-  // If funeral homes are empty, fetch from QuoteContext
-  useEffect(() => {
-    if (!funeralHomes || funeralHomes.length === 0) {
-      fetchFuneralHomes?.();
-    }
-  }, [funeralHomes, fetchFuneralHomes]);
-
-  // Keep local selection in sync with quote.home
-  useEffect(() => {
-    if (quote.home) {
-      setLocalSelectedId(quote.home);
-    }
-  }, [quote.home]);
-
   // Handle Search Trigger
   const handleSearch = (e) => {
     if (e) e.preventDefault();

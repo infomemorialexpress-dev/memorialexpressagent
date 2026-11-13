@@ -29,6 +29,7 @@ export default function AgentQuoteFunnel() {
     quote,
     setQuote,
     db,
+    dbError,
     calculation,
     selectHome,
     selectedChapel,
@@ -36,7 +37,9 @@ export default function AgentQuoteFunnel() {
     selectCasket,
     toggleAddon,
     updateQuantity,
-    addToast
+    addToast,
+    fetchFuneralHomes,
+    reloadCatalog
   } = useQuote();
 
   const [zoomedCasket, setZoomedCasket] = useState(null);
@@ -84,6 +87,39 @@ export default function AgentQuoteFunnel() {
   const handleStepClick = (target) => {
     setStep(target);
   };
+
+  if (dbError && (!db || !db.homes || db.homes.length === 0)) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '480px', margin: '40px auto' }}>
+        <div style={{ fontSize: '36px', marginBottom: '12px' }}>⚠️</div>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>
+          {lang === 'es' ? 'Error al cargar datos' : 'Unable to Load Data'}
+        </h3>
+        <p style={{ fontSize: '13.5px', color: '#64748b', lineHeight: 1.5, marginBottom: '20px' }}>
+          {dbError}
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            fetchFuneralHomes?.();
+            reloadCatalog?.();
+          }}
+          style={{
+            backgroundColor: '#183655',
+            color: '#ffffff',
+            border: 'none',
+            padding: '10px 24px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: 650,
+            cursor: 'pointer'
+          }}
+        >
+          {lang === 'es' ? 'Reintentar' : 'Retry'}
+        </button>
+      </div>
+    );
+  }
 
   if (!calculation) {
     return (
