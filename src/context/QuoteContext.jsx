@@ -77,7 +77,7 @@ export function QuoteProvider({ children }) {
     setIsLoadingHomes(true);
     setDbError(null);
     try {
-      const response = await api.get('/funeral-homes');
+      const response = await api.get('/funeral-homes?onlyActive=true');
       const homes = Array.isArray(response.data) ? response.data : [];
       setFuneralHomes(homes);
       setDb(prev => ({

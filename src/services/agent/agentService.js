@@ -4,7 +4,7 @@ import { ApiError, formatErrorMessage } from '../base/apiClient.js';
 
 export async function fetchFuneralHomes() {
   try {
-    const res = await api.get('/funeral-homes');
+    const res = await api.get('/funeral-homes?onlyActive=true');
     const homes = Array.isArray(res.data) ? res.data : [];
     return {
       success: true,
@@ -92,7 +92,7 @@ export async function fetchPackagePricing(homeId, serviceId) {
 export async function fetchAgentQuoteDb() {
   try {
     const [homesRes, casketsRes, addonsRes] = await Promise.all([
-      api.get('/funeral-homes'),
+      api.get('/funeral-homes?onlyActive=true'),
       api.get('/catalog?type=CASKET'),
       api.get('/catalog?type=ADDON')
     ]);
