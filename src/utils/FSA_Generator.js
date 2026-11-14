@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { formatMoney, formatCurrency, formatCatalogPrice, getItemizedServicesList, t, getLocalizedText } from './quoteLogic.js';
+import { formatMoney, formatCurrency, formatCatalogPrice, getItemizedServicesList, t, getLocalizedText, isCasketNeeded } from './quoteLogic.js';
 
 function getTranslatedServiceTitle(title, isEs) {
   if (!isEs) return title;
@@ -63,7 +63,9 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const isBurial = !isCremation && !isShip;
 
   // Casket Selection Guard: Strictly check if a casket was explicitly chosen (never fall back to calculation.s2 or alternative containers)
-  const hasSelectedCasket = Boolean(
+  // Cart Integrity: If package does not need a casket (like Direct Cremation), strictly force casket to null
+  const casketNeeded = isCasketNeeded(serviceKey, serviceObj || calculation?.serviceObj);
+  const hasSelectedCasket = casketNeeded && Boolean(
     (quote?.selectedCasket && (quote.selectedCasket._id || quote.selectedCasket.id || quote.selectedCasket.name)) ||
     (quote?.selectedCasketObject && (quote.selectedCasketObject._id || quote.selectedCasketObject.id || quote.selectedCasketObject.name)) ||
     (quote?.casket && String(quote.casket).trim() !== '') ||
@@ -374,13 +376,14 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   const guaranteedMerchRows = guaranteedAddons.length > 0
     ? guaranteedAddons.map(item => {
         const translatedName = isEs ? (getLocalizedText(item, 'name', 'es') || t(item.name, 'es')) : (item.name || '');
+        const isItemIncluded = Boolean(item.isIncluded);
         const rawUnitPrice = item.unitPrice !== undefined ? item.unitPrice : item.price;
         const unitNum = Number(rawUnitPrice ?? 0);
-        const unitDisplay = unitNum === 0 ? 'Incl' : formatCurrency(unitNum);
+        const unitDisplay = isItemIncluded ? 'Incl' : formatCurrency(unitNum);
         const labelText = item.quantity > 1 ? `${translatedName} (${item.quantity} × ${unitDisplay})` : translatedName;
         const rawPrice = item.totalPrice !== undefined ? item.totalPrice : item.price;
         const itemPrice = Number(rawPrice ?? 0);
-        const priceVal = itemPrice === 0 ? 'Incl' : formatCurrency(itemPrice);
+        const priceVal = isItemIncluded ? 'Incl' : formatCurrency(itemPrice);
         return {
           label: labelText,
           val: priceVal,
@@ -395,7 +398,7 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
 
   const casketPriceNum = Number(dynamicCasketPrice ?? 0);
   const casketPriceVal = hasSelectedCasket
-    ? (casketPriceNum === 0 ? 'Incl' : formatCurrency(casketPriceNum))
+    ? (casket?.isIncluded ? 'Incl' : formatCurrency(casketPriceNum))
     : '';
 
   const merchRows = [

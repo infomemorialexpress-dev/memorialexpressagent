@@ -36,22 +36,16 @@ export function formatMoney(amount) {
 
 export const formatCurrency = formatMoney;
 
-// Catalog item (merchandise & add-ons) formatting: displays "Incl" when price is 0
-export function formatCatalogPrice(amount) {
+// Catalog item (merchandise & add-ons) formatting: displays "Incl" only when explicitly included
+export function formatCatalogPrice(amount, isIncluded = false) {
+  if (isIncluded) {
+    return 'Incl';
+  }
   if (typeof amount === 'string') {
     const trimmed = amount.trim().toLowerCase();
     if (trimmed === 'incl' || trimmed === 'included') {
       return 'Incl';
     }
-  }
-  if (
-    amount !== null &&
-    amount !== undefined &&
-    amount !== '' &&
-    !isNaN(Number(amount)) &&
-    Number(amount) === 0
-  ) {
-    return 'Incl';
   }
   return formatMoney(amount);
 }
@@ -119,31 +113,44 @@ export function getLocalizedText(item, field, currentLang = 'en') {
 }
 
 // Check if service requires a casket
-export function isCasketNeeded(service) {
-  if (!service) return true;
+export function isCasketNeeded(service, selectedServiceObject = null) {
+  if (!service && !selectedServiceObject) return true;
   let category = '';
-  if (typeof service === 'object') {
-    category = String(service.category || '').toLowerCase();
-    service = service.name || service.id || service._id || '';
+  let s = '';
+  let pkgName = '';
+  if (selectedServiceObject && typeof selectedServiceObject === 'object') {
+    category = String(selectedServiceObject.category || '').toLowerCase();
+    pkgName = String(selectedServiceObject.packageName || selectedServiceObject.name || '').toLowerCase();
   }
-  const s = String(service).toLowerCase();
-
-  if (category === 'cremation' && (s.includes('direct') || s.includes('memorial'))) {
-    return false;
-  }
-  if (category === 'traditional' || category === 'ship-out') {
-    return true;
+  if (typeof service === 'object' && service !== null) {
+    category = category || String(service.category || '').toLowerCase();
+    pkgName = pkgName || String(service.packageName || service.name || service.id || service._id || '').toLowerCase();
+    s = pkgName;
+  } else {
+    s = String(service || '').toLowerCase();
   }
 
   // Pure cremations that don't need a casket
-  if (s === 'direct_cremation' || s === 'memorial_cremation' || s.includes('direct cremation') || s.includes('memorial cremation')) {
+  if (
+    s === 'direct_cremation' ||
+    s === 'memorial_cremation' ||
+    s.includes('direct cremation') ||
+    s.includes('memorial cremation') ||
+    pkgName.includes('direct cremation') ||
+    pkgName.includes('memorial cremation') ||
+    (category.includes('cremat') && (s.includes('direct') || s.includes('memorial') || pkgName.includes('direct') || pkgName.includes('memorial')))
+  ) {
     return false;
   }
-  if (CASKET_TYPES.includes(service)) return true;
+
+  if (category === 'traditional' || category === 'ship-out') {
+    return true;
+  }
+  if (CASKET_TYPES.includes(service) || CASKET_TYPES.includes(s) || CASKET_TYPES.includes(pkgName)) return true;
   if (s.includes('burial') || s.includes('traditional') || s.includes('funeral') || s.includes('two') || s.includes('one') || s.includes('ship') || s.includes('graveside') || s.includes('casket') || s.includes('complete')) {
     return true;
   }
-  if (CREM_TYPES.includes(service) || s.includes('cremat')) {
+  if (CREM_TYPES.includes(service) || CREM_TYPES.includes(s) || s.includes('cremat') || category.includes('cremat')) {
     return false;
   }
   return true;
@@ -340,19 +347,23 @@ export function calculateQuote(q, db) {
     ? q.selectedCasketObject
     : null;
 
-  if (rawCasketId) {
-    casket = allCaskets.find(x => (x.id === rawCasketId || x._id === rawCasketId) && isEligibleCasket(x, h, q.service, db, q.selectedServiceObject));
-  }
-  if (!casket && rawCasketObj && (rawCasketObj._id || rawCasketObj.id || rawCasketObj.productCode || rawCasketObj.name)) {
-    casket = {
-      ...rawCasketObj,
-      price: rawCasketObj.listPrice ?? rawCasketObj.price ?? 0
-    };
-  }
-  if (casket) {
-    const casketOverride = q.priceOverrides?.[casket.id] ?? q.priceOverrides?.[casket._id] ?? q.casketPrice;
-    if (casketOverride !== undefined && casketOverride !== null && casketOverride !== '') {
-      casket = { ...casket, price: Math.max(0, Number(casketOverride) || 0) };
+  // Cart Integrity: If package explicitly skips/does not require a casket (e.g. Direct Cremation), strictly force casket to null
+  const casketNeeded = isCasketNeeded(q.service, q.selectedServiceObject);
+  if (casketNeeded) {
+    if (rawCasketId) {
+      casket = allCaskets.find(x => (x.id === rawCasketId || x._id === rawCasketId) && isEligibleCasket(x, h, q.service, db, q.selectedServiceObject));
+    }
+    if (!casket && rawCasketObj && (rawCasketObj._id || rawCasketObj.id || rawCasketObj.productCode || rawCasketObj.name)) {
+      casket = {
+        ...rawCasketObj,
+        price: rawCasketObj.listPrice ?? rawCasketObj.price ?? 0
+      };
+    }
+    if (casket) {
+      const casketOverride = q.priceOverrides?.[casket.id] ?? q.priceOverrides?.[casket._id] ?? q.casketPrice;
+      if (casketOverride !== undefined && casketOverride !== null && casketOverride !== '') {
+        casket = { ...casket, price: Math.max(0, Number(casketOverride) || 0) };
+      }
     }
   }
 
@@ -448,12 +459,13 @@ export function calculateQuote(q, db) {
         const total = Number(a.totalPrice ?? (qty * unit) ?? a.price ?? 0);
         return {
           id: a.id,
-          name: qty > 1 ? `${a.name} (${qty} × ${formatCatalogPrice(unit)})` : a.name,
+          name: qty > 1 ? `${a.name} (${qty} × ${formatCatalogPrice(unit, a.isIncluded)})` : a.name,
           price: total,
           unitPrice: unit,
           quantity: qty,
           taxable: false,
-          isGuaranteed: false
+          isGuaranteed: false,
+          isIncluded: Boolean(a.isIncluded),
         };
       });
   } else if (Array.isArray(q.selectedAddonObjects) && q.selectedAddonObjects.length > 0) {
@@ -465,12 +477,13 @@ export function calculateQuote(q, db) {
         const total = Number(a.totalPrice ?? (qty * unit) ?? a.price ?? 0);
         return {
           id: a.id,
-          name: qty > 1 ? `${a.name} (${qty} × ${formatCatalogPrice(unit)})` : a.name,
+          name: qty > 1 ? `${a.name} (${qty} × ${formatCatalogPrice(unit, a.isIncluded)})` : a.name,
           price: total,
           unitPrice: unit,
           quantity: qty,
           taxable: false,
-          isGuaranteed: false
+          isGuaranteed: false,
+          isIncluded: Boolean(a.isIncluded),
         };
       });
   } else {

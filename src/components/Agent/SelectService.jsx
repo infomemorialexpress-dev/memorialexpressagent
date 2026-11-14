@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
-import { formatMoney, getLocalizedText } from '../../utils/quoteLogic.js';
+import { formatMoney, getLocalizedText, isCasketNeeded } from '../../utils/quoteLogic.js';
 import { ServiceCardSkeleton } from '../common/SkeletonLoader.jsx';
 
 export default function SelectService({ onBack, onContinue }) {
@@ -13,6 +13,7 @@ export default function SelectService({ onBack, onContinue }) {
     selectedFuneralHome,
     selectedService,
     selectService,
+    selectCasket,
     addToast
   } = useQuote();
 
@@ -89,6 +90,9 @@ export default function SelectService({ onBack, onContinue }) {
               section2Price: hp.section2Price !== undefined ? Number(hp.section2Price) : combined[existingIdx].section2Price,
               category: hp.category || combined[existingIdx].category,
               itemizedServices: hp.itemizedServices || combined[existingIdx].itemizedServices,
+              visitationHours: (hp.visitationHours !== undefined && hp.visitationHours !== null && hp.visitationHours !== '' && !isNaN(Number(hp.visitationHours))) ? Number(hp.visitationHours) : (combined[existingIdx].visitationHours !== undefined ? Number(combined[existingIdx].visitationHours) : 0),
+              funeralServiceHours: (hp.funeralServiceHours !== undefined && hp.funeralServiceHours !== null && hp.funeralServiceHours !== '' && !isNaN(Number(hp.funeralServiceHours))) ? Number(hp.funeralServiceHours) : (combined[existingIdx].funeralServiceHours !== undefined ? Number(combined[existingIdx].funeralServiceHours) : 0),
+              transferMiles: (hp.transferMiles !== undefined && hp.transferMiles !== null && hp.transferMiles !== '' && !isNaN(Number(hp.transferMiles))) ? Number(hp.transferMiles) : (combined[existingIdx].transferMiles !== undefined ? Number(combined[existingIdx].transferMiles) : 25),
               displayOrder: hp.displayOrder !== undefined ? Number(hp.displayOrder) : (combined[existingIdx].displayOrder !== undefined ? Number(combined[existingIdx].displayOrder) : 0),
             };
           } else {
@@ -103,6 +107,10 @@ export default function SelectService({ onBack, onContinue }) {
               category_es: hp.category_es || '',
               section1Price: Number(hp.section1Price) || 0,
               section2Price: Number(hp.section2Price) || 0,
+              itemizedServices: hp.itemizedServices || null,
+              visitationHours: (hp.visitationHours !== undefined && hp.visitationHours !== null && hp.visitationHours !== '' && !isNaN(Number(hp.visitationHours))) ? Number(hp.visitationHours) : 0,
+              funeralServiceHours: (hp.funeralServiceHours !== undefined && hp.funeralServiceHours !== null && hp.funeralServiceHours !== '' && !isNaN(Number(hp.funeralServiceHours))) ? Number(hp.funeralServiceHours) : 0,
+              transferMiles: (hp.transferMiles !== undefined && hp.transferMiles !== null && hp.transferMiles !== '' && !isNaN(Number(hp.transferMiles))) ? Number(hp.transferMiles) : 25,
               displayOrder: hp.displayOrder !== undefined ? Number(hp.displayOrder) : 0,
               isCustom: true,
             });
@@ -174,7 +182,16 @@ export default function SelectService({ onBack, onContinue }) {
 
   const handleCardClick = (service) => {
     setLocalSelectedService(service);
+    // Immediately clear selected casket when selecting or switching packages
+    selectCasket?.(null);
   };
+
+  // Watch selected package changes and automatically reset selectedCasket in global state
+  useEffect(() => {
+    if (localSelectedService) {
+      selectCasket?.(null);
+    }
+  }, [localSelectedService?._id, localSelectedService?.id, localSelectedService?.name, selectCasket]);
 
   const handleContinue = () => {
     if (!localSelectedService) {
@@ -185,15 +202,57 @@ export default function SelectService({ onBack, onContinue }) {
       return;
     }
 
-    // Save entire selected service object (including section1Price and section2Price) into QuoteContext
+    // Save entire selected service object into QuoteContext and ensure casket is reset
     selectService(localSelectedService);
-    onContinue();
+    selectCasket?.(null);
+    if (onContinue) {
+      onContinue(localSelectedService);
+    }
   };
 
   const isContinueDisabled = !localSelectedService;
+  const isEs = lang === 'es';
+  const selectedLocationName =
+    selectedFuneralHome?.name ||
+    quote?.homeName ||
+    quote?.selectedHomeObj?.name ||
+    '';
 
   return (
     <div>
+      {/* Prominent Active Funeral Home Header */}
+      {selectedLocationName && (
+        <div
+          className="currently-quoting-banner"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '10px',
+            backgroundColor: '#eff6ff',
+            border: '1.5px solid #93c5fd',
+            borderRadius: '10px',
+            padding: '8px 16px',
+            marginBottom: '16px',
+            boxShadow: '0 1px 3px rgba(30, 58, 138, 0.06)'
+          }}
+        >
+          <span style={{ fontSize: '18px' }}>🏛️</span>
+          <h3
+            className="text-primary"
+            style={{
+              margin: 0,
+              fontSize: '16.5px',
+              fontWeight: 800,
+              color: '#1d4ed8',
+              letterSpacing: '-0.2px',
+            }}
+          >
+            {isEs ? 'Cotizando Actualmente para: ' : 'Currently Quoting for: '}
+            <span style={{ color: '#1e3a8a', textDecoration: 'underline' }}>{selectedLocationName}</span>
+          </h3>
+        </div>
+      )}
+
       <h1 className="page-title">
         {t('service.title', lang === 'es' ? 'Seleccione el Servicio Funerario' : 'Select Funeral Service')}
       </h1>

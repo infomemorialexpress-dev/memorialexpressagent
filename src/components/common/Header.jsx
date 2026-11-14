@@ -31,7 +31,7 @@ function getInitials(name) {
 
 export default function Header({ lang, onLanguageToggle }) {
   const { isAuthenticated, agentUser, logout } = useAuth();
-  const { addToast } = useQuote();
+  const { addToast, resetQuote } = useQuote();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -40,9 +40,15 @@ export default function Header({ lang, onLanguageToggle }) {
     navigate('/login');
   };
 
+  const handleNewQuote = () => {
+    resetQuote?.();
+    navigate('/');
+    addToast(lang === 'es' ? 'Nueva cotización iniciada' : 'New quote started', 'info');
+  };
+
   return (
     <header className="app-header">
-      <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <Link to="/" onClick={() => resetQuote?.()} style={{ textDecoration: 'none', color: 'inherit' }}>
         <div className="brand-wrapper">
           <BrandFeatherIcon className="brand-logo-img" />
           <div>
@@ -55,6 +61,18 @@ export default function Header({ lang, onLanguageToggle }) {
       </Link>
 
       <div className="header-actions">
+        {isAuthenticated && (
+          <button
+            type="button"
+            className="header-lang-btn"
+            onClick={handleNewQuote}
+            style={{ fontWeight: 650, color: '#145633', borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' }}
+            title={lang === 'es' ? 'Iniciar nueva cotización' : 'Start new quote'}
+          >
+            <span>+</span>
+            <span>{lang === 'es' ? 'Nueva Cotización' : 'New Quote'}</span>
+          </button>
+        )}
         {onLanguageToggle && (
           <button
             type="button"

@@ -30,6 +30,12 @@ export default function AddonsOptions({ onBack, onContinue }) {
     quote?.home ||
     '';
 
+  const selectedLocationName =
+    selectedFuneralHome?.name ||
+    quote?.homeName ||
+    quote?.selectedHomeObj?.name ||
+    '';
+
   // Selected Service Package from Step 3 (or Step 2 zero-indexed)
   const selectedPackageId = String(
     quote?.selectedServiceObject?._id ||
@@ -126,7 +132,8 @@ export default function AddonsOptions({ onBack, onContinue }) {
                 if (!item) return false;
                 const price = item.listPrice !== null && item.listPrice !== undefined ? Number(item.listPrice) : Number(item.price);
                 const hasDests = Boolean(item.hasDestinations && Array.isArray(item.destinations) && item.destinations.length > 0);
-                if (!(price >= 0 || hasDests) || item.isActive === false) return false;
+                if (!(price >= 0 || hasDests)) return false;
+                if (item.isActive === false && !item.isMandatory && price > 0) return false;
 
                 // Safely handle assignedPackages: explicitly check if array exists before mapping or filtering
                 const pkgs = Array.isArray(item?.assignedPackages) ? item.assignedPackages : [];
@@ -161,6 +168,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
                 type: item.type || item.category || 'Non-Guaranteed',
                 isMandatory: Boolean(item.isMandatory),
                 isFixedPrice: Boolean(item.isFixedPrice),
+                isIncluded: Boolean(item.isIncluded),
                 hasDestinations: Boolean(item.hasDestinations),
                 destinations: Array.isArray(item?.destinations) ? item.destinations : [],
                 assignedPackages: Array.isArray(item?.assignedPackages) ? item.assignedPackages : [],
@@ -400,6 +408,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
         price: totalPrice,
         totalPrice,
         quantity,
+        isIncluded: Boolean(found?.isIncluded),
         isGuaranteed: isGuar,
         taxable: isGuar,
         taxRate,
@@ -481,6 +490,7 @@ export default function AddonsOptions({ onBack, onContinue }) {
     const totalPrice = unitPrice * qty;
     const taxAmount = isGuaranteed ? Math.round(totalPrice * 0.11 * 100) / 100 : 0;
     const isMandatory = Boolean(addon.isMandatory);
+    const isIncludedItem = Boolean(addon.isIncluded);
     const displayedPrice = (customPrices && customPrices[addon.id] !== undefined) ? customPrices[addon.id] : unitPrice;
     const isZeroPrice = displayedPrice !== '' && displayedPrice !== null && displayedPrice !== undefined && !isNaN(Number(displayedPrice)) && Number(displayedPrice) === 0;
     const isEditingZero = editingZeroAddonId === addon.id;
@@ -851,9 +861,9 @@ export default function AddonsOptions({ onBack, onContinue }) {
               </button>
             </div>
 
-            {/* Editable Numeric Price Input Column (or INCL badge when $0) */}
+            {/* Editable Numeric Price Input Column (or INCL badge when isIncluded) */}
             <div style={{ textAlign: 'right', minWidth: '105px' }} onClick={(e) => e.stopPropagation()}>
-              {isZeroPrice && !isEditingZero ? (
+              {isIncludedItem && !isEditingZero ? (
                 <div
                   onClick={() => {
                     if (!addon.isFixedPrice) {
@@ -861,8 +871,8 @@ export default function AddonsOptions({ onBack, onContinue }) {
                     }
                   }}
                   title={addon.isFixedPrice
-                    ? (isEs ? 'Incluido ($0 fijo)' : 'Included (fixed $0)')
-                    : (isEs ? 'Incluido ($0) — clic para editar precio' : 'Included ($0) — click to edit price')}
+                    ? (isEs ? 'Incluido (INCL)' : 'Included (INCL)')
+                    : (isEs ? 'Incluido (INCL) — clic para editar precio' : 'Included (INCL) — click to edit price')}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -928,10 +938,10 @@ export default function AddonsOptions({ onBack, onContinue }) {
 
               {qty > 1 && (
                 <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', marginTop: '3px', whiteSpace: 'nowrap' }}>
-                  Total: {isZeroPrice ? 'INCL' : formatCatalogPrice(totalPrice)}
+                  Total: {isIncludedItem ? 'INCL' : formatCatalogPrice(totalPrice)}
                 </div>
               )}
-              {isGuaranteed && !isZeroPrice && (
+              {isGuaranteed && !isIncludedItem && totalPrice > 0 && (
                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', marginTop: '2px', whiteSpace: 'nowrap' }}>
                   + {formatMoney(taxAmount)} (11% tax)
                 </div>
@@ -939,9 +949,9 @@ export default function AddonsOptions({ onBack, onContinue }) {
             </div>
           </div>
         ) : (
-          /* Unchecked State: Editable numeric price input column (or INCL badge when $0) */
+          /* Unchecked State: Editable numeric price input column (or INCL badge when isIncluded) */
           <div style={{ textAlign: 'right', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-            {isZeroPrice && !isEditingZero ? (
+            {isIncludedItem && !isEditingZero ? (
               <div
                 onClick={() => {
                   if (!addon.isFixedPrice) {
@@ -949,8 +959,8 @@ export default function AddonsOptions({ onBack, onContinue }) {
                   }
                 }}
                 title={addon.isFixedPrice
-                  ? (isEs ? 'Incluido ($0 fijo)' : 'Included (fixed $0)')
-                  : (isEs ? 'Incluido ($0) — clic para editar precio' : 'Included ($0) — click to edit price')}
+                  ? (isEs ? 'Incluido (INCL)' : 'Included (INCL)')
+                  : (isEs ? 'Incluido (INCL) — clic para editar precio' : 'Included (INCL) — click to edit price')}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1025,6 +1035,38 @@ export default function AddonsOptions({ onBack, onContinue }) {
 
   return (
     <div className="addons-options-container">
+      {/* Prominent Active Funeral Home Header */}
+      {selectedLocationName && (
+        <div
+          className="currently-quoting-banner"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '10px',
+            backgroundColor: '#eff6ff',
+            border: '1.5px solid #93c5fd',
+            borderRadius: '10px',
+            padding: '8px 16px',
+            marginBottom: '16px',
+            boxShadow: '0 1px 3px rgba(30, 58, 138, 0.06)'
+          }}
+        >
+          <span style={{ fontSize: '18px' }}>🏛️</span>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: '15.5px',
+              fontWeight: 700,
+              color: '#1e40af',
+              letterSpacing: '-0.2px',
+            }}
+          >
+            {isEs ? 'Cotizando actualmente para: ' : 'Currently Quoting for: '}
+            <span style={{ color: '#1d4ed8', fontWeight: 800 }}>{selectedLocationName}</span>
+          </h3>
+        </div>
+      )}
+
       {/* 1. Header & Subtitle */}
       <h1
         className="page-title"

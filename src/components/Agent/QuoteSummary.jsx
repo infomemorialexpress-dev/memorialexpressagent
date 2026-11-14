@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
-import { formatMoney, formatCurrency, formatCatalogPrice, SERVICES, getItemizedServicesList, getLocalizedText } from '../../utils/quoteLogic.js';
+import { formatMoney, formatCurrency, formatCatalogPrice, SERVICES, getItemizedServicesList, getLocalizedText, isCasketNeeded } from '../../utils/quoteLogic.js';
 import { generateFSAPdf } from '../../utils/FSA_Generator.js';
 import { QuoteSummarySkeleton } from '../common/SkeletonLoader.jsx';
 
 export default function QuoteSummary({ onBack, onContinue }) {
   const { t } = useTranslation();
-  const { lang, quote, calculation, db, addToast } = useQuote();
+  const { lang, quote, calculation, db, addToast, selectCasket } = useQuote();
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const isEs = lang === 'es';
@@ -61,12 +61,21 @@ export default function QuoteSummary({ onBack, onContinue }) {
 
   // Section II: Dynamic Casket Merchandise Details & Price
   // Casket Selection Guard: Strictly check if a casket was explicitly chosen (never fall back to calculation.s2 or alternative containers)
-  const hasSelectedCasket = Boolean(
+  // Cart Integrity: If package does not need a casket (like Direct Cremation), strictly force casket to null
+  const casketNeeded = isCasketNeeded(serviceObj || serviceKey, serviceObj);
+  const hasSelectedCasket = casketNeeded && Boolean(
     (quote?.selectedCasket && (quote.selectedCasket._id || quote.selectedCasket.id || quote.selectedCasket.name)) ||
     (quote?.selectedCasketObject && (quote.selectedCasketObject._id || quote.selectedCasketObject.id || quote.selectedCasketObject.name)) ||
     (quote?.casket && String(quote.casket).trim() !== '') ||
     (calculation?.casket && (calculation.casket._id || calculation.casket.id || calculation.casket.name))
   );
+
+  // Cart Integrity Validation: If this package skips/does not require a casket, ensure global state has selectedCasket cleared
+  useEffect(() => {
+    if (!casketNeeded && (quote.casket || quote.selectedCasket || quote.selectedCasketObject)) {
+      selectCasket?.(null);
+    }
+  }, [casketNeeded, quote.casket, quote.selectedCasket, quote.selectedCasketObject, selectCasket]);
 
   const casket = hasSelectedCasket
     ? (calculation.casket || quote.selectedCasket || quote.selectedCasketObject || quote.casketObj || null)
@@ -577,7 +586,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {hasSelectedCasket ? (Number(dynamicCasketPrice) === 0 ? 'Incl' : formatCurrency(dynamicCasketPrice)) : ''}
+                      {hasSelectedCasket ? (casket?.isIncluded ? 'Incl' : formatCurrency(dynamicCasketPrice)) : ''}
                     </td>
                   </tr>
                   <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
@@ -672,11 +681,12 @@ export default function QuoteSummary({ onBack, onContinue }) {
                       const baseName = getLocalizedText(item, 'name', lang) || item.name;
                       const rawUnitPrice = item.unitPrice !== undefined ? item.unitPrice : item.price;
                       const unitNum = Number(rawUnitPrice ?? 0);
-                      const unitDisplay = unitNum === 0 ? 'Incl' : formatCurrency(unitNum);
+                      const isItemIncluded = Boolean(item.isIncluded);
+                      const unitDisplay = isItemIncluded ? 'Incl' : formatCurrency(unitNum);
                       const iName = item.quantity > 1 ? `${baseName} (${item.quantity} × ${unitDisplay})` : baseName;
                       const rawPrice = item.totalPrice !== undefined ? item.totalPrice : item.price;
                       const iPrice = Number(rawPrice ?? 0);
-                      const priceDisplay = iPrice === 0 ? 'Incl' : formatCurrency(iPrice);
+                      const priceDisplay = isItemIncluded ? 'Incl' : formatCurrency(iPrice);
                       return (
                         <tr key={idx} style={{ borderBottom: '1px solid #cbd5e1' }}>
                           <td style={{ padding: '3px 6px', color: '#111827' }}>

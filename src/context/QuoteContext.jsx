@@ -23,8 +23,8 @@ export function QuoteProvider({ children }) {
   // Funnel Step State (0 = Location/Home, 1 = Home Confirm, 2 = Service, 3 = Merchandise, 4 = Addons, 5 = Summary, 6 = Legal)
   const [step, setStep] = useState(0);
 
-  // Quote State
-  const [quote, setQuote] = useState({
+  // Initial Quote State definition for clean re-use
+  const initialQuoteState = {
     location: '',
     budget: '',
     home: '',
@@ -32,10 +32,17 @@ export function QuoteProvider({ children }) {
     homeName: '',
     selectedHomeObj: null,
     service: '',
+    serviceName: '',
+    selectedServiceObject: null,
     casket: '',
+    casketName: '',
+    selectedCasketObject: null,
+    casketPrice: 0,
     addons: [],
     guaranteedAddons: [],
     nonGuaranteedAddons: [],
+    selectedAddonObjects: [],
+    addonQuantities: {},
     customNonGuaranteedItems: [
       { name: '', price: '' },
       { name: '', price: '' },
@@ -53,7 +60,10 @@ export function QuoteProvider({ children }) {
     selectedBranch: null,
     selectedChapel: null,
     priceOverrides: {}
-  });
+  };
+
+  // Quote State
+  const [quote, setQuote] = useState(initialQuoteState);
 
   // Toasts with guaranteed auto-dismissal
   const [toasts, setToasts] = useState([]);
@@ -155,7 +165,19 @@ export function QuoteProvider({ children }) {
     }
   }, [lang]);
 
+  // Reset Quote / Start New Quote action
+  const resetQuote = useCallback(() => {
+    setSelectedFuneralHome(null);
+    setSelectedChapel(null);
+    setSelectedBranch(null);
+    setSelectedService(null);
+    setSelectedCasket(null);
+    setQuote(initialQuoteState);
+    setStep(0);
+  }, []);
+
   // Funnel Actions: selectHome saves the selected FuneralHome object (including its _id and chapels array)
+  // Whenever user selects a new Funeral Home (Step 1), selectedCasket, selectedService, and selectedAddons are explicitly reset
   const selectHome = (homeOrId) => {
     let homeObj = null;
     let homeId = '';
@@ -172,6 +194,8 @@ export function QuoteProvider({ children }) {
     setSelectedFuneralHome(homeObj);
     setSelectedChapel(null);
     setSelectedBranch(null);
+    setSelectedService(null);
+    setSelectedCasket(null);
 
     setQuote(prev => ({
       ...prev,
@@ -182,8 +206,17 @@ export function QuoteProvider({ children }) {
       selectedChapel: null,
       selectedBranch: null,
       service: '',
+      serviceName: '',
+      selectedServiceObject: null,
       casket: '',
+      casketName: '',
+      selectedCasketObject: null,
+      casketPrice: 0,
       addons: [],
+      guaranteedAddons: [],
+      nonGuaranteedAddons: [],
+      selectedAddonObjects: [],
+      addonQuantities: {},
       urnAllowance: '',
       priceOverrides: {}
     }));
@@ -236,6 +269,7 @@ export function QuoteProvider({ children }) {
   // Selected Service Object
   const [selectedService, setSelectedService] = useState(null);
 
+  // Whenever user selects or changes a Package (Step 3), selectedCasket and selectedAddons are explicitly reset
   const selectService = (serviceOrId) => {
     let serviceObj = null;
     let serviceId = '';
@@ -258,6 +292,7 @@ export function QuoteProvider({ children }) {
     }
 
     setSelectedService(serviceObj);
+    setSelectedCasket(null);
 
     setQuote(prev => {
       let urnAllowance = prev.urnAllowance;
@@ -268,11 +303,19 @@ export function QuoteProvider({ children }) {
       return {
         ...prev,
         service: serviceId,
-        serviceName: serviceObj?.name || prev.serviceName || '',
+        serviceName: serviceObj?.name || serviceObj?.packageName || prev.serviceName || '',
         selectedServiceObject: serviceObj,
         casket: '',
-        addons: prev.addons || [],
-        urnAllowance
+        casketName: '',
+        selectedCasketObject: null,
+        casketPrice: 0,
+        addons: [],
+        guaranteedAddons: [],
+        nonGuaranteedAddons: [],
+        selectedAddonObjects: [],
+        addonQuantities: {},
+        urnAllowance,
+        priceOverrides: {}
       };
     });
   };
@@ -282,10 +325,22 @@ export function QuoteProvider({ children }) {
   const [selectedCasket, setSelectedCasket] = useState(null);
 
   const selectCasket = (casketOrId) => {
+    if (!casketOrId) {
+      setSelectedCasket(null);
+      setQuote(prev => ({
+        ...prev,
+        casket: '',
+        casketName: '',
+        selectedCasketObject: null,
+        casketPrice: 0
+      }));
+      return;
+    }
+
     let casketObj = null;
     let casketId = '';
 
-    if (casketOrId && typeof casketOrId === 'object' && !Array.isArray(casketOrId)) {
+    if (typeof casketOrId === 'object' && !Array.isArray(casketOrId)) {
       casketObj = casketOrId;
       casketId = casketOrId._id || casketOrId.id || casketOrId.productCode || '';
     } else if (typeof casketOrId === 'string' && casketOrId.trim() !== '') {
@@ -357,6 +412,8 @@ export function QuoteProvider({ children }) {
         dbError,
         reloadCatalog: loadAgentCatalog,
         calculation,
+        resetQuote,
+        startNewQuote: resetQuote,
         selectHome,
         selectedService,
         selectService,

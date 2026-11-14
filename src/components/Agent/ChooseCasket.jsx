@@ -278,14 +278,20 @@ export default function ChooseCasket({ onBack, onContinue }) {
           setCaskets(unique);
 
           // Reconcile current selection strictly matching single unique key
-          if (localSelectedCasket) {
-            const currentSelKey = getCasketKey(localSelectedCasket);
-            const found = unique.find(c => getCasketKey(c) === currentSelKey);
-            if (found) {
-              setLocalSelectedCasket(found);
-            } else {
-              setLocalSelectedCasket(null);
-              selectCasket(null);
+          if (unique.length === 0) {
+            setLocalSelectedCasket(null);
+            selectCasket(null);
+          } else {
+            const activeSel = localSelectedCasket || selectedCasket || quote.selectedCasketObject;
+            if (activeSel) {
+              const currentSelKey = getCasketKey(activeSel);
+              const found = unique.find(c => getCasketKey(c) === currentSelKey);
+              if (found) {
+                setLocalSelectedCasket(found);
+              } else {
+                setLocalSelectedCasket(null);
+                selectCasket(null);
+              }
             }
           }
         }
@@ -298,8 +304,21 @@ export default function ChooseCasket({ onBack, onContinue }) {
           if (fallbackCaskets.length > 0) {
             setCaskets(fallbackCaskets);
             setError(null);
+            const activeSel = localSelectedCasket || selectedCasket || quote.selectedCasketObject;
+            if (activeSel) {
+              const currentSelKey = getCasketKey(activeSel);
+              const found = fallbackCaskets.find(c => getCasketKey(c) === currentSelKey);
+              if (found) {
+                setLocalSelectedCasket(found);
+              } else {
+                setLocalSelectedCasket(null);
+                selectCasket(null);
+              }
+            }
           } else {
             setCaskets([]);
+            setLocalSelectedCasket(null);
+            selectCasket(null);
             setError(lang === 'es' ? 'Error al cargar los ataúdes desde la base de datos.' : 'Failed to load caskets from the database.');
           }
         }
@@ -316,6 +335,28 @@ export default function ChooseCasket({ onBack, onContinue }) {
       isMounted = false;
     };
   }, [funeralHomeId, quote.service, quote.selectedServiceObject, selectedPackageId, selectedPackageName]);
+
+  // Safety Check in Casket Step (Step 4):
+  // Check the length of the available caskets/merchandise array.
+  // If the array is empty (length === 0), automatically dispatch an action to clear selectedCasket from the global state.
+  // This guarantees that if "No merchandise available" is displayed, the cart is mathematically empty.
+  useEffect(() => {
+    if (caskets.length === 0) {
+      if (selectedCasket || quote.casket || quote.selectedCasketObject || localSelectedCasket) {
+        setLocalSelectedCasket(null);
+        selectCasket(null);
+      }
+    }
+  }, [caskets.length, selectedCasket, quote.casket, quote.selectedCasketObject, localSelectedCasket, selectCasket]);
+
+  // Keep local selection state in sync if global selectedCasket is cleared externally
+  useEffect(() => {
+    if (!selectedCasket && !quote.casket && !quote.selectedCasketObject) {
+      if (localSelectedCasket) {
+        setLocalSelectedCasket(null);
+      }
+    }
+  }, [selectedCasket, quote.casket, quote.selectedCasketObject, localSelectedCasket]);
 
   const handlePriceChange = (casket, val) => {
     if (casket.isFixedPrice) return;
@@ -358,8 +399,47 @@ export default function ChooseCasket({ onBack, onContinue }) {
     onContinue();
   };
 
+  const selectedLocationName =
+    selectedFuneralHome?.name ||
+    quote?.homeName ||
+    quote?.selectedHomeObj?.name ||
+    '';
+
   return (
     <div>
+      {/* Prominent Active Funeral Home Header */}
+      {selectedLocationName && (
+        <div
+          className="currently-quoting-banner"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '10px',
+            backgroundColor: '#eff6ff',
+            border: '1.5px solid #93c5fd',
+            borderRadius: '10px',
+            padding: '8px 16px',
+            marginBottom: '16px',
+            boxShadow: '0 1px 3px rgba(30, 58, 138, 0.06)'
+          }}
+        >
+          <span style={{ fontSize: '18px' }}>🏛️</span>
+          <h3
+            className="text-primary"
+            style={{
+              margin: 0,
+              fontSize: '16.5px',
+              fontWeight: 800,
+              color: '#1d4ed8',
+              letterSpacing: '-0.2px',
+            }}
+          >
+            {lang === 'es' ? 'Cotizando Actualmente para: ' : 'Currently Quoting for: '}
+            <span style={{ color: '#1e3a8a', textDecoration: 'underline' }}>{selectedLocationName}</span>
+          </h3>
+        </div>
+      )}
+
       <h1 className="page-title">
         {lang === 'es' ? 'Selección de Mercancía y Ataúdes' : 'Casket & Merchandise Selection'}
       </h1>

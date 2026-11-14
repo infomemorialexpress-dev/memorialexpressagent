@@ -17,7 +17,8 @@ import {
   SERVICES,
   formatMoney,
   formatCatalogPrice,
-  isShipOut
+  isShipOut,
+  isCasketNeeded
 } from '../../utils/quoteLogic.js';
 
 export default function AgentQuoteFunnel() {
@@ -39,7 +40,8 @@ export default function AgentQuoteFunnel() {
     updateQuantity,
     addToast,
     fetchFuneralHomes,
-    reloadCatalog
+    reloadCatalog,
+    resetQuote
   } = useQuote();
 
   const [zoomedCasket, setZoomedCasket] = useState(null);
@@ -85,6 +87,14 @@ export default function AgentQuoteFunnel() {
   };
 
   const handleStepClick = (target) => {
+    const svc = quote.selectedServiceObject || quote.service;
+    const needsCasket = isCasketNeeded(svc, quote.selectedServiceObject);
+    if (target === 3 && !needsCasket) {
+      // Direct Cremation / packages without caskets skip Step 3
+      selectCasket?.(null);
+      setStep(4);
+      return;
+    }
     setStep(target);
   };
 
@@ -165,8 +175,16 @@ export default function AgentQuoteFunnel() {
               setStep(1);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            onContinue={() => {
-              setStep(3);
+            onContinue={(chosenService) => {
+              const svc = chosenService || quote.selectedServiceObject || quote.service;
+              const needsCasket = isCasketNeeded(svc, chosenService || quote.selectedServiceObject);
+              if (!needsCasket) {
+                // If package explicitly skips casket selection (e.g. Direct Cremation), force selectedCasket to null
+                selectCasket?.(null);
+                setStep(4);
+              } else {
+                setStep(3);
+              }
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
@@ -189,7 +207,16 @@ export default function AgentQuoteFunnel() {
         {/* STEP 4: ADD-ONS & CASH ADVANCES (Step 5 of 7) */}
         {step === 4 && (
           <AddonsOptions
-            onBack={handleBack}
+            onBack={() => {
+              const svc = quote.selectedServiceObject || quote.service;
+              const needsCasket = isCasketNeeded(svc, quote.selectedServiceObject);
+              if (!needsCasket) {
+                setStep(2);
+              } else {
+                setStep(3);
+              }
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
             onContinue={() => {
               setStep(5);
               window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -216,7 +243,8 @@ export default function AgentQuoteFunnel() {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onContinue={() => {
-              setStep(5);
+              resetQuote?.();
+              setStep(0);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
