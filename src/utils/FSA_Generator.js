@@ -65,33 +65,69 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
   // Casket Selection Guard: Strictly check if a casket was explicitly chosen (never fall back to calculation.s2 or alternative containers)
   // Cart Integrity: If package does not need a casket (like Direct Cremation), strictly force casket to null
   const casketNeeded = isCasketNeeded(serviceKey, serviceObj || calculation?.serviceObj);
-  const hasSelectedCasket = casketNeeded && Boolean(
-    (quote?.selectedCasket && (quote.selectedCasket._id || quote.selectedCasket.id || quote.selectedCasket.name)) ||
-    (quote?.selectedCasketObject && (quote.selectedCasketObject._id || quote.selectedCasketObject.id || quote.selectedCasketObject.name)) ||
-    (quote?.casket && String(quote.casket).trim() !== '') ||
-    (calculation?.casket && (calculation.casket._id || calculation.casket.id || calculation.casket.name))
+
+  // Robust Casket Resolution: check quote, calculation, and db lookup
+  const rawPayloadCasket =
+    quote?.selectedCasket ||
+    quote?.selectedCasketObject ||
+    (typeof quote?.casket === 'object' && quote?.casket !== null ? quote.casket : null) ||
+    calculation?.casket ||
+    quote?.casketObj ||
+    null;
+
+  let resolvedCasket = (rawPayloadCasket && typeof rawPayloadCasket === 'object') ? { ...rawPayloadCasket } : null;
+
+  // If only an ID was provided, look up the complete casket model in db.caskets
+  if (!resolvedCasket || !resolvedCasket.name) {
+    const rawId = String(quote?.casket?._id || quote?.casket?.id || quote?.casket || quote?.selectedCasket || '').trim();
+    if (rawId && Array.isArray(db?.caskets) && db.caskets.length > 0) {
+      const found = db.caskets.find(c => String(c._id || c.id) === rawId);
+      if (found) {
+        resolvedCasket = { ...found, ...(resolvedCasket || {}) };
+      }
+    }
+  }
+
+  const isDirectCremation =
+    serviceKey === 'direct_cremation' ||
+    serviceKey === 'memorial_cremation' ||
+    (serviceObj?.category === 'Cremation' &&
+      (String(serviceObj?.packageName || serviceObj?.name || '').toLowerCase().includes('direct') ||
+       String(serviceObj?.packageName || serviceObj?.name || '').toLowerCase().includes('memorial')));
+
+  const hasSelectedCasket = !isDirectCremation && casketNeeded && Boolean(
+    resolvedCasket && (resolvedCasket._id || resolvedCasket.id || resolvedCasket.name || resolvedCasket.itemName || resolvedCasket.price !== undefined || resolvedCasket.listPrice !== undefined)
   );
 
-  const casket = hasSelectedCasket
-    ? (calculation?.casket || quote?.selectedCasket || quote?.selectedCasketObject || quote?.casketObj || null)
-    : null;
+  const casket = hasSelectedCasket ? resolvedCasket : null;
   const dynamicCasketPrice = hasSelectedCasket && casket
     ? Number(casket.price ?? casket.listPrice ?? calculation?.casketPrice ?? 0)
     : 0;
   const dynamicCasketName = hasSelectedCasket && casket
-    ? (getLocalizedText(casket, 'name', isEs ? 'es' : 'en') || casket.itemName || casket.name || '')
+    ? (getLocalizedText(casket, 'name', isEs ? 'es' : 'en') || casket.itemName || casket.name || casket.casketName || '')
     : '';
   const dynamicManufacturer = hasSelectedCasket && casket ? (casket.manufacturer || '') : '';
-  const dynamicInterior = hasSelectedCasket && casket
+  let dynamicInterior = hasSelectedCasket && casket
     ? (casket.interiorFabricAndColor || casket.interiorFabricColor || casket.interiorExterior || casket.interior || '')
     : '';
-  const dynamicExterior = hasSelectedCasket && casket
+  let dynamicExterior = hasSelectedCasket && casket
     ? (casket.exteriorColor || casket.exterior || casket.color || '')
     : '';
-  const dynamicConstruction = hasSelectedCasket && casket
+  let dynamicConstruction = hasSelectedCasket && casket
     ? (casket.constructionAndType || casket.constructionType || casket.construction || casket.material || '')
     : '';
   const dynamicModel = hasSelectedCasket && casket ? (casket.modelNumber || casket.model || '') : '';
+
+  // Fallbacks: If discrete specs aren't separately populated, parse from specifications / description string
+  if (hasSelectedCasket && casket) {
+    const specsStr = String(casket.specifications || casket.description || '').trim();
+    if (specsStr) {
+      const parts = specsStr.split(/[;,]/).map(p => p.trim()).filter(Boolean);
+      if (!dynamicConstruction && parts[0]) dynamicConstruction = parts[0];
+      if (!dynamicExterior && parts[1]) dynamicExterior = parts[1];
+      if (!dynamicInterior && parts[2]) dynamicInterior = parts[2];
+    }
+  }
 
   // Guaranteed Add-ons from Step 5 (e.g., Memorial package)
   const isGuaranteedItem = (a) => {
@@ -427,8 +463,9 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
 
     if (mRow.val !== undefined && mRow.val !== null && mRow.val !== '') {
       doc.setFont('helvetica', mRow.isBold || mRow.isBoldVal ? 'bold' : 'normal');
+      doc.setFontSize(mRow.isBold || mRow.isBoldVal ? 6.8 : 6.4);
       doc.setTextColor(0);
-      doc.text(String(mRow.val), rightX + colWidth - 4, rightY + 10, { align: 'right' });
+      doc.text(String(mRow.val), rightX + colWidth - 4, rightY + 10, { align: 'right', maxWidth: colWidth - 95 });
     }
 
     doc.setDrawColor(...borderLight);

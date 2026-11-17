@@ -8,7 +8,7 @@ import { QuoteSummarySkeleton } from '../common/SkeletonLoader.jsx';
 
 export default function QuoteSummary({ onBack, onContinue }) {
   const { t } = useTranslation();
-  const { lang, quote, calculation, db, addToast, selectCasket } = useQuote();
+  const { lang, quote, calculation, db, addToast, selectCasket, selectedCasket } = useQuote();
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const isEs = lang === 'es';
@@ -78,7 +78,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
   }, [casketNeeded, quote.casket, quote.selectedCasket, quote.selectedCasketObject, selectCasket]);
 
   const casket = hasSelectedCasket
-    ? (calculation.casket || quote.selectedCasket || quote.selectedCasketObject || quote.casketObj || null)
+    ? (selectedCasket || quote?.selectedCasket || quote?.selectedCasketObject || calculation?.casket || quote?.casketObj || null)
     : null;
   const dynamicCasketPrice = hasSelectedCasket && casket
     ? Number(casket.price ?? casket.listPrice ?? calculation.casketPrice ?? 0)
@@ -203,9 +203,34 @@ export default function QuoteSummary({ onBack, onContinue }) {
   const handlePrintSavePdf = async () => {
     setIsGeneratingPdf(true);
     try {
+      const activeCasketObj = hasSelectedCasket && casket ? {
+        ...casket,
+        id: casket.id || casket._id,
+        _id: casket._id || casket.id,
+        name: dynamicCasketName,
+        itemName: dynamicCasketName,
+        manufacturer: dynamicManufacturer,
+        interiorFabricColor: dynamicInterior,
+        interiorFabricAndColor: dynamicInterior,
+        exteriorColor: dynamicExterior,
+        constructionType: dynamicConstruction,
+        constructionAndType: dynamicConstruction,
+        modelNumber: dynamicModel,
+        interiorExterior: dynamicInterior,
+        exterior: dynamicExterior,
+        construction: dynamicConstruction,
+        model: dynamicModel,
+        price: dynamicCasketPrice,
+        listPrice: dynamicCasketPrice,
+        isIncluded: Boolean(casket?.isIncluded),
+      } : null;
+
       generateFSAPdf({
         quote: {
           ...quote,
+          selectedCasket: activeCasketObj,
+          selectedCasketObject: activeCasketObj,
+          casket: activeCasketObj,
           selectedChapel,
           guaranteedAddons,
           nonGuaranteedAddons: dynamicSelectedAddons,
@@ -236,20 +261,7 @@ export default function QuoteSummary({ onBack, onContinue }) {
           firmName: dynamicFirmName,
           firmAddress: dynamicFirmAddress,
           firmPhone: dynamicFirmPhone,
-          casket: hasSelectedCasket && casket ? {
-            ...casket,
-            name: dynamicCasketName,
-            manufacturer: dynamicManufacturer,
-            interiorFabricColor: dynamicInterior,
-            exteriorColor: dynamicExterior,
-            constructionType: dynamicConstruction,
-            modelNumber: dynamicModel,
-            interiorExterior: dynamicInterior,
-            exterior: dynamicExterior,
-            construction: dynamicConstruction,
-            model: dynamicModel,
-            price: dynamicCasketPrice,
-          } : null,
+          casket: activeCasketObj,
         },
         db,
         lang,

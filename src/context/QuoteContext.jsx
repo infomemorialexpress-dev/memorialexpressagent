@@ -210,6 +210,7 @@ export function QuoteProvider({ children }) {
       selectedServiceObject: null,
       casket: '',
       casketName: '',
+      selectedCasket: null,
       selectedCasketObject: null,
       casketPrice: 0,
       addons: [],
@@ -307,6 +308,7 @@ export function QuoteProvider({ children }) {
         selectedServiceObject: serviceObj,
         casket: '',
         casketName: '',
+        selectedCasket: null,
         selectedCasketObject: null,
         casketPrice: 0,
         addons: [],
@@ -354,6 +356,7 @@ export function QuoteProvider({ children }) {
       ...prev,
       casket: casketId,
       casketName: casketObj?.name || (casketId ? prev.casketName : '') || '',
+      selectedCasket: casketObj,
       selectedCasketObject: casketObj,
       casketPrice: casketObj?.listPrice ?? casketObj?.price ?? 0
     }));

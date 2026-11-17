@@ -150,7 +150,7 @@ export function isCasketNeeded(service, selectedServiceObject = null) {
   if (s.includes('burial') || s.includes('traditional') || s.includes('funeral') || s.includes('two') || s.includes('one') || s.includes('ship') || s.includes('graveside') || s.includes('casket') || s.includes('complete')) {
     return true;
   }
-  if (CREM_TYPES.includes(service) || CREM_TYPES.includes(s) || s.includes('cremat') || category.includes('cremat')) {
+  if (s === 'direct_cremation' || s === 'memorial_cremation' || s.includes('direct') || s.includes('memorial')) {
     return false;
   }
   return true;
