@@ -112,6 +112,48 @@ export function getLocalizedText(item, field, currentLang = 'en') {
   return isEs ? t(defaultVal, 'es') : defaultVal;
 }
 
+// Strict classification helper for Guaranteed Merchandise vs Non-Guaranteed Cash Advance items
+export function isGuaranteedItem(item) {
+  if (!item) return false;
+
+  // 1. STRICT CATEGORY / TYPE PRIORITY
+  // Check category and type fields from database / item object
+  const cat = String(item.category || '').trim().toLowerCase();
+  const type = String(item.type || '').trim().toLowerCase();
+
+  // Explicit Non-Guaranteed check takes precedence:
+  if (
+    cat.includes('non') ||
+    cat.includes('cash_advance') ||
+    cat.includes('cash advance') ||
+    type.includes('non') ||
+    type.includes('cash_advance') ||
+    type.includes('cash advance')
+  ) {
+    return false;
+  }
+
+  // Explicit Guaranteed check:
+  if (
+    (cat.includes('guarant') && !cat.includes('non')) ||
+    (type.includes('guarant') && !type.includes('non')) ||
+    cat === 'merchandise' ||
+    type === 'merchandise' ||
+    item.isGuaranteed === true
+  ) {
+    return true;
+  }
+
+  if (item.isGuaranteed === false) {
+    return false;
+  }
+
+  // 2. FALLBACK ONLY IF CATEGORY/TYPE IS NOT EXPLICITLY SET (e.g. legacy static items)
+  const id = String(item.id || '').toLowerCase();
+  const name = String(item.name || item.itemName || '').toLowerCase();
+  return id === 'memorial' || name.includes('memorial package');
+}
+
 // Check if service requires a casket
 export function isCasketNeeded(service, selectedServiceObject = null) {
   if (!service && !selectedServiceObject) return true;
@@ -429,21 +471,14 @@ export function calculateQuote(q, db) {
   const flowersQty = flower ? Math.max(1, Math.floor(Number(q.flowersQty) || 1)) : 0;
   const escortQty = escorts ? Math.max(h === 'felipe' ? 2 : 1, Math.floor(Number(q.escortQty) || 1)) : 0;
 
-  // Separate Guaranteed Add-ons (e.g., Memorial package with 11% tax)
-  const isGuaranteedItem = (a) => {
-    if (!a) return false;
-    const id = String(a.id || '').toLowerCase();
-    const name = String(a.name || '').toLowerCase();
-    return a.type === 'Guaranteed' || !!a.isGuaranteed || id === 'memorial' || name.includes('memorial package');
-  };
-
-  const guaranteedAddons = Array.isArray(q.guaranteedAddons) && q.guaranteedAddons.length > 0
+  // Separate Guaranteed Add-ons (strictly based on isGuaranteedItem, e.g. Guaranteed Merchandise with 11% tax)
+  const guaranteedAddons = (Array.isArray(q.guaranteedAddons) && q.guaranteedAddons.length > 0
     ? q.guaranteedAddons
     : (Array.isArray(q.selectedAddonObjects)
-        ? q.selectedAddonObjects.filter(isGuaranteedItem)
+        ? q.selectedAddonObjects
         : (selectedAddonIds.includes('memorial')
             ? [{ id: 'memorial', name: 'Memorial package — guest book, memorial cards & video', price: 395, unitPrice: 395, quantity: 1, totalPrice: 395, isGuaranteed: true }]
-            : []));
+            : []))).filter(isGuaranteedItem);
 
   const guaranteedAddonsBasePrice = guaranteedAddons.reduce((tot, a) => tot + Number(a.totalPrice ?? a.price ?? 0), 0);
   const guaranteedAddonsTax = Math.round(guaranteedAddonsBasePrice * 0.11 * 100) / 100;
@@ -489,7 +524,8 @@ export function calculateQuote(q, db) {
   } else {
     added = activeAddons
       .filter(a =>
-        !['flowers', 'murillo_flowers', 'felipe_flowers', 'memorial', 'escorts', 'murillo_escort', 'air_tray'].includes(a.id) &&
+        !['flowers', 'murillo_flowers', 'felipe_flowers', 'escorts', 'murillo_escort', 'air_tray'].includes(a.id) &&
+        (a.id !== 'memorial' || !isGuaranteedItem(a)) &&
         !a.id.startsWith('western_') &&
         !a.id.startsWith('felipe_') &&
         !isGuaranteedItem(a)
@@ -536,7 +572,7 @@ export function calculateQuote(q, db) {
   const dispositionPermitFee = Number(q.dispositionPermitFee || 0);
   const mandatory = dispositionPermitFee + (certsCount * deathCertFee);
 
-  const memorialPrice = h === 'murillo' ? 0 : (memorial ? getItemPrice(memorial) : 0);
+  const memorialPrice = h === 'murillo' ? 0 : (memorial && isGuaranteedItem(memorial) ? getItemPrice(memorial) : 0);
   const airTrayPrice = h === 'murillo'
     ? 0
     : (airTray ? (h === 'felipe' ? 250 : (h === 'western' ? 795 : getItemPrice(airTray))) : felipeAirTray);

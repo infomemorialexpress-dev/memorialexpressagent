@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { formatMoney, formatCurrency, formatCatalogPrice, getItemizedServicesList, t, getLocalizedText, isCasketNeeded } from './quoteLogic.js';
+import { formatMoney, formatCurrency, formatCatalogPrice, getItemizedServicesList, t, getLocalizedText, isCasketNeeded, isGuaranteedItem } from './quoteLogic.js';
 
 function getTranslatedServiceTitle(title, isEs) {
   if (!isEs) return title;
@@ -129,23 +129,16 @@ export function generateFSAPdf({ quote, calculation, db, lang = 'en' }) {
     }
   }
 
-  // Guaranteed Add-ons from Step 5 (e.g., Memorial package)
-  const isGuaranteedItem = (a) => {
-    if (!a) return false;
-    const id = String(a.id || '').toLowerCase();
-    const name = String(a.name || '').toLowerCase();
-    return !!a.isGuaranteed || id === 'memorial' || name.includes('memorial package');
-  };
-
-  const guaranteedAddons = Array.isArray(calculation?.guaranteedAddons) && calculation.guaranteedAddons.length > 0
+  // Guaranteed Add-ons from Step 5 (strictly based on isGuaranteedItem, e.g. Guaranteed Merchandise with 11% tax)
+  const guaranteedAddons = (Array.isArray(calculation?.guaranteedAddons) && calculation.guaranteedAddons.length > 0
     ? calculation.guaranteedAddons
     : (Array.isArray(quote?.guaranteedAddons) && quote.guaranteedAddons.length > 0
         ? quote.guaranteedAddons
         : (Array.isArray(quote?.selectedAddonObjects)
-            ? quote.selectedAddonObjects.filter(isGuaranteedItem)
+            ? quote.selectedAddonObjects
             : (quote?.addons?.includes('memorial')
                 ? [{ id: 'memorial', name: 'Memorial package — guest book, memorial cards & video', price: 395, unitPrice: 395, quantity: 1, totalPrice: 395, isGuaranteed: true }]
-                : [])));
+                : [])))).filter(isGuaranteedItem);
 
   const guaranteedAddonsTotal = Number(calculation?.guaranteedAddonsTotal) || guaranteedAddons.reduce(
     (sum, a) => sum + Number(a.totalPrice ?? a.price ?? 0),

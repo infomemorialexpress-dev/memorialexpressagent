@@ -3,18 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useQuote } from '../../context/QuoteContext.jsx';
 import Button from '../common/Button.jsx';
 import api from '../../services/api.js';
-import { formatMoney, formatCatalogPrice, getLocalizedText } from '../../utils/quoteLogic.js';
+import { formatMoney, formatCatalogPrice, getLocalizedText, isGuaranteedItem } from '../../utils/quoteLogic.js';
 import { AddonRowSkeleton } from '../common/SkeletonLoader.jsx';
 
-export const isGuaranteedAddonItem = (item) => {
-  if (!item) return false;
-  const cat = String(item.category || item.type || '').toLowerCase();
-  if (cat.includes('guarant') && !cat.includes('non')) return true;
-  if (cat.includes('non')) return false;
-  const id = String(item.id || '').toLowerCase();
-  const name = String(item.name || '').toLowerCase();
-  return !!item.isGuaranteed || id === 'memorial' || name.includes('memorial package');
-};
+export const isGuaranteedAddonItem = (item) => isGuaranteedItem(item);
 
 export default function AddonsOptions({ onBack, onContinue }) {
   const { t } = useTranslation();
@@ -403,7 +395,9 @@ export default function AddonsOptions({ onBack, onContinue }) {
         itemName: found ? (found.itemName || found.name) : id,
         itemName_es: found?.itemName_es || found?.name_es || '',
         name_es: found?.itemName_es || found?.name_es || '',
+        category: found?.category || (isGuar ? 'Guaranteed' : 'Non-Guaranteed'),
         category_es: found?.category_es || '',
+        type: found?.type || (isGuar ? 'Guaranteed' : 'Non-Guaranteed'),
         unitPrice,
         price: totalPrice,
         totalPrice,
